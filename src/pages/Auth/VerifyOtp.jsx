@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axiosInstance from '../../api/axiosInstance';
+import axiosInstance from '../../Api/axiosInstance';
 import { toast } from 'react-toastify';
 
 const VerifyOtp = () => {
