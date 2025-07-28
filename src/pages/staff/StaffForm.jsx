@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/common/Layout';
 import { Form, Button, Container, Alert } from 'react-bootstrap';
-import { createStaff, fetchStaffById, updateStaff } from '../../api/staff';
+import { createStaff, fetchStaffById, updateStaff } from '../../Api/staff';
 import { getBranches } from '../../Api/branches';  // Assuming you have this api OK
 import { notifySuccess, notifyError } from '../../utils/notifications';
 import { useNavigate, useParams } from 'react-router-dom';
