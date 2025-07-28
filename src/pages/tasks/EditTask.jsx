@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Form, Button, Container, Spinner, Alert, Row, Col, ProgressBar, Card, Badge, Dropdown } from 'react-bootstrap';
 import { fetchTaskById, updateTask } from '../../Api/tasks';
 import { fetchDepartments } from '../../Api/departments';
-import { fetchUsers } from '../../api/users';
+import { fetchUsers } from '../../Api/users';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 

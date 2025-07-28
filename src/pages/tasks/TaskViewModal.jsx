@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, Button, Badge, Row, Col, ProgressBar, Card } from 'react-bootstrap';
 import { Attachment as AttachmentIcon, Group as GroupIcon, Business as BusinessIcon, CalendarToday as CalendarIcon } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
-import { getTaskHistory } from '../../api/taskApi'; // adjust path if needed
+import { getTaskHistory } from '../../Api/taskApi'; // adjust path if needed
 import { Collapse, Spinner } from 'react-bootstrap';
 
 

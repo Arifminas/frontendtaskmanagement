@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Layout from '../../components/common/Layout';
 import { Container, Row, Col, Card } from 'react-bootstrap';
 import { useAuth } from '../../contexts/AuthContext';
-import axiosInstance from '../../api/axiosInstance';
+import axiosInstance from '../../Api/axiosInstance';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 

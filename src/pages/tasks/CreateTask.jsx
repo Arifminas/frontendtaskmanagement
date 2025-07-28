@@ -12,8 +12,8 @@ import {
   Badge,
 } from 'react-bootstrap';
 import { fetchDepartments } from '../../Api/departments';
-import { fetchUsers } from '../../api/users';
-import { createTask } from '../../api/tasks';
+import { fetchUsers } from '../../Api/users';
+import { createTask } from '../../Api/tasks';
 import axiosInstance from '../../Api/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 import { notifySuccess, notifyError } from '../../utils/notifications';
