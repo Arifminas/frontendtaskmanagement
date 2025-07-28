@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Button, Form, Alert, Spinner } from 'react-bootstrap';
-import axiosInstance from '../../api/axiosInstance';
+import axiosInstance from '../../Api/axiosInstance';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const ChangePasswordModal = ({ show, handleClose }) => {

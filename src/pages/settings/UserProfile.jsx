@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/common/Layout';
 import { Form, Button, Container, Alert } from 'react-bootstrap';
-import axiosInstance from '../../api/axiosInstance';
+import axiosInstance from '../../Api/axiosInstance';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 import { useAuth } from '../../contexts/AuthContext';
 
