@@ -61,7 +61,7 @@ import {
   Info as InfoIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchUsers, updateUser } from '../../api/users';
+import { fetchUsers, updateUser } from '../../Api/users';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const RoleAssignment = () => {

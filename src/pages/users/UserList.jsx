@@ -54,7 +54,7 @@ import {
   PersonAdd as PersonAddIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchUsers, deleteUser } from '../../api/users';
+import { fetchUsers, deleteUser } from '../../Api/users';
 import { useNavigate } from 'react-router-dom';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 import { useAuth } from '../../contexts/AuthContext';

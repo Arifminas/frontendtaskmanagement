@@ -43,7 +43,7 @@ import {
   ArrowBack as BackIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchUserById, createUser, updateUser } from '../../api/users';
+import { fetchUserById, createUser, updateUser } from '../../Api/users';
 import { fetchDepartments } from '../../Api/departments';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 import { useNavigate, useParams } from 'react-router-dom';
