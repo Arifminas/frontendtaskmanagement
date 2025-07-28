@@ -4,7 +4,7 @@ import {
   createAssetGroup,
   updateAssetGroup,
   deleteAssetGroup,
-} from '../../api/assetGroups';
+} from '../../Api/assetGroups';
 
 export const getAssetGroups = createAsyncThunk(
   'assetGroups/getAssetGroups',
