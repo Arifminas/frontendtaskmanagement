@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axiosInstance from '../../Api/axiosInstance';
 
-// Fetch assets list
+// Fetch 
 export const fetchAssets = createAsyncThunk(
   'assets/fetchAssets',
   async (_, { rejectWithValue }) => {
