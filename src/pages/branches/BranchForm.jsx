@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Button, Container, Alert } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchBranchById, createBranch, updateBranch } from '../../api/branches';
+import { fetchBranchById, createBranch, updateBranch } from '../../Api/branches';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const BranchForm = () => {

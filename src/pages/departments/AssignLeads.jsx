@@ -50,7 +50,7 @@ import { TextField, InputAdornment } from '@mui/material';
 
 // Import your API functions and utilities
 import { fetchDepartments, assignLeads } from '../../Api/departments';
-import { fetchUsers } from '../../api/users';
+import { fetchUsers } from '../../Api/users';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const AssignLeads = () => {

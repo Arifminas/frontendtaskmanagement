@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/common/Layout';
 import { Form, Button, Container, Alert } from 'react-bootstrap';
-import { fetchAssets } from '../../api/assets';
-import { fetchBranches } from '../../api/branches';
-import { fetchStaff } from '../../api/staff';
-import { transferAsset } from '../../api/assets';
+import { fetchAssets } from '../../Api/assets';
+import { fetchBranches } from '../../Api/branches';
+import { fetchStaff } from '../../Api/staff';
+import { transferAsset } from '../../Api/assets';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const TransferAsset = () => {
