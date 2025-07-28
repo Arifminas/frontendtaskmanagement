@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../../components/common/Layout';
 import { Table, Button, Spinner } from 'react-bootstrap';
-import { fetchStaff, deleteStaff } from '../../api/staff';
+import { fetchStaff, deleteStaff } from '../../Api/staff';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 import { useNavigate } from 'react-router-dom';
 
