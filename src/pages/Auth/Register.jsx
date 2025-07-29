@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -8,10 +8,6 @@ import {
   Box,
   Alert,
   Avatar,
-  CircularProgress,
-  useTheme,
-  useMediaQuery,
-  Divider,
   IconButton,
   InputAdornment,
   FormControl,
@@ -24,23 +20,22 @@ import {
   PersonAdd as PersonAddIcon,
   Visibility,
   VisibilityOff,
-  Email as EmailIcon,
-  Person as PersonIcon,
-  Lock as LockIcon,
-  Business as BusinessIcon,
-  AdminPanelSettings as AdminIcon,
-  ArrowForward as ArrowIcon
+  EmailOutlined,
+  PersonOutlined,
+  LockOutlined,
+  BusinessOutlined,
+  AdminPanelSettingsOutlined,
+  LoginOutlined,
+  CheckCircleOutlined,
+  ErrorOutlined
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
 import axiosInstance from '../../Api/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
 const Register = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
+  
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -49,75 +44,97 @@ const Register = () => {
     department: '',
     role: 'user',
   });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [generalError, setGeneralError] = useState('');
 
-  const handleChange = (e) => {
+  // Validation
+  const validate = (field, value) => {
+    switch (field) {
+      case 'name':
+        if (!value?.trim()) return 'Name is required';
+        if (value.trim().length < 2) return 'Name must be at least 2 characters';
+        return '';
+      case 'email':
+        if (!value?.trim()) return 'Email is required';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Invalid email format';
+        return '';
+      case 'password':
+        if (!value) return 'Password is required';
+        if (value.length < 6) return 'Password must be at least 6 characters';
+        return '';
+      case 'confirmPassword':
+        if (!value) return 'Please confirm your password';
+        if (value !== form.password) return 'Passwords do not match';
+        return '';
+      case 'department':
+        if (!value?.trim()) return 'Department is required';
+        return '';
+      default:
+        return '';
+    }
+  };
+
+  const getValidationIcon = (field) => {
+    if (!touched[field] || !form[field]) return null;
+    const error = validate(field, form[field]);
+    return error ? 
+      <ErrorOutlined sx={{ color: '#f44336', fontSize: 20 }} /> :
+      <CheckCircleOutlined sx={{ color: '#dc267f', fontSize: 20 }} />;
+  };
+
+  const isFormValid = () => {
+    const fields = ['name', 'email', 'password', 'confirmPassword', 'department'];
+    return fields.every(field => 
+      form[field] && !validate(field, form[field])
+    );
+  };
+
+  // Event handlers
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    setForm(prev => ({ ...prev, [name]: value }));
     
-    // Clear field-specific errors
-    if (fieldErrors[name]) {
-      setFieldErrors({ ...fieldErrors, [name]: '' });
+    if (touched[name]) {
+      const error = validate(name, value);
+      setErrors(prev => ({ ...prev, [name]: error }));
     }
     
-    // Clear general error
-    if (error) setError('');
-  };
+    // Re-validate confirm password if password changes
+    if (name === 'password' && touched.confirmPassword) {
+      const confirmError = validate('confirmPassword', form.confirmPassword);
+      setErrors(prev => ({ ...prev, confirmPassword: confirmError }));
+    }
+    
+    if (generalError) setGeneralError('');
+  }, [touched, generalError, form.confirmPassword]);
 
-  const validateEmail = (email) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
+  const handleBlur = useCallback((e) => {
+    const { name, value } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validate(name, value);
+    setErrors(prev => ({ ...prev, [name]: error }));
+  }, []);
 
-  const validateForm = () => {
-    const errors = {};
-    
-    if (!form.name.trim()) {
-      errors.name = 'Name is required';
-    } else if (form.name.trim().length < 2) {
-      errors.name = 'Name must be at least 2 characters';
-    }
-    
-    if (!form.email) {
-      errors.email = 'Email is required';
-    } else if (!validateEmail(form.email)) {
-      errors.email = 'Please enter a valid email address';
-    }
-    
-    if (!form.password) {
-      errors.password = 'Password is required';
-    } else if (form.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
-    }
-    
-    if (!form.confirmPassword) {
-      errors.confirmPassword = 'Please confirm your password';
-    } else if (form.password !== form.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
-    }
-    
-    if (!form.department.trim()) {
-      errors.department = 'Department is required';
-    }
-    
-    return errors;
-  };
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
+    const newErrors = {};
+    const fields = ['name', 'email', 'password', 'confirmPassword', 'department'];
+    
+    fields.forEach(field => {
+      const error = validate(field, form[field]);
+      if (error) newErrors[field] = error;
+    });
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setTouched(Object.fromEntries(fields.map(field => [field, true])));
+      setGeneralError('Please fix the errors below');
       return;
     }
-    
-    setError('');
-    setFieldErrors({});
-    setLoading(true);
 
     try {
       const res = await axiosInstance.post('/auth/register', {
@@ -128,599 +145,488 @@ const Register = () => {
         role: form.role,
       });
       
-      toast.success(res.data.message || 'Registration successful! Please check your email for verification.');
-      setError('');
-      
-      setTimeout(() => navigate('/verify-otp', { state: { email: form.email } }), 2000);
+      toast.success(res.data.message || 'Registration successful!');
+      setTimeout(() => navigate('/verify-otp', { state: { email: form.email } }), 1000);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Registration failed. Please try again.';
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
+      const errorMsg = err.response?.data?.message || 'Registration failed';
+      setGeneralError(errorMsg);
+      toast.error(errorMsg);
     }
-  };
-
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
-  const toggleConfirmPasswordVisibility = () => {
-    setShowConfirmPassword(!showConfirmPassword);
-  };
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0, y: 50 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.6,
-        ease: "easeOut",
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.4 }
-    }
-  };
-
-  const logoVariants = {
-    hidden: { scale: 0, rotate: -180 },
-    visible: {
-      scale: 1,
-      rotate: 0,
-      transition: {
-        type: "spring",
-        stiffness: 260,
-        damping: 20,
-        delay: 0.2
-      }
-    }
-  };
+  }, [form, navigate]);
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case 'admin': return <AdminIcon />;
-      case 'coordinator': return <BusinessIcon />;
-      default: return <PersonIcon />;
+      case 'admin': 
+        return <AdminPanelSettingsOutlined />;
+      case 'coordinator': 
+        return <BusinessOutlined />;
+      default: 
+        return <PersonOutlined />;
+    }
+  };
+
+  // Common text field styles
+  const textFieldStyles = {
+    mb: 2,
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 1.5,
+      backgroundColor: '#ffffff',
+      '& input': {
+        color: '#1a2752 !important',
+        fontSize: '16px',
+        fontWeight: 500,
+        WebkitTextFillColor: '#1a2752 !important',
+        '&:-webkit-autofill': {
+          WebkitBoxShadow: '0 0 0 1000px #ffffff inset !important',
+          WebkitTextFillColor: '#1a2752 !important',
+          backgroundColor: '#ffffff !important'
+        }
+      },
+      '&.Mui-focused fieldset': {
+        borderColor: '#1a2752'
+      }
+    },
+    '& .MuiInputLabel-root': {
+      color: '#666666',
+      fontSize: '16px',
+      '&.Mui-focused': {
+        color: '#1a2752'
+      }
+    },
+    '& .MuiFormHelperText-root': {
+      color: '#f44336',
+      fontSize: '14px'
     }
   };
 
   return (
-    <Container
-      component="main"
-      maxWidth="md"
+    <Box 
       sx={{
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        py: 3,
-        px: { xs: 2, sm: 3 }
+        background: 'linear-gradient(135deg, #1a2752 0%, #dc267f 100%)',
+        p: 2,
+        boxSizing: 'border-box'
       }}
     >
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        style={{ width: '100%' }}
+      <Container 
+        maxWidth="md" 
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%'
+        }}
       >
-        <Paper
-          elevation={isMobile ? 2 : 8}
+        <Paper 
+          elevation={8}
           sx={{
-            p: { xs: 3, sm: 4, md: 5 },
-            borderRadius: { xs: 2, sm: 3 },
-            background: '#ffffff',
-            border: '1px solid rgba(220, 38, 127, 0.1)',
-            backdropFilter: 'blur(10px)',
-            boxShadow: isMobile 
-              ? '0 4px 20px rgba(26, 39, 82, 0.15)' 
-              : '0 20px 40px rgba(26, 39, 82, 0.2)',
+            p: { xs: 3, sm: 4 },
+            borderRadius: 2,
+            background: 'rgba(255, 255, 255, 0.98)',
+            width: '100%',
+            maxWidth: 800,
+            mx: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center'
           }}
         >
-          {/* Logo Section */}
-          <motion.div variants={logoVariants}>
-            <Box
+          {/* Header */}
+          <Box 
+            sx={{ 
+              textAlign: 'center', 
+              mb: 4,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+          >
+            <Avatar 
               sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                mb: 4
+                background: 'linear-gradient(45deg, #1a2752, #dc267f)',
+                width: 60,
+                height: 60,
+                mx: 'auto',
+                mb: 2
               }}
             >
-              <Box
-                sx={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: { xs: 80, sm: 96 },
-                  height: { xs: 80, sm: 96 },
-                  borderRadius: '50%',
-                  background: '#1a2752',
-                  boxShadow: '0 8px 32px rgba(26, 39, 82, 0.4)',
-                  overflow: 'hidden',
-                  mb: 1
-                }}
-              >
-                <img
-                  src="/src/img/logo.png"
-                  alt="Company Logo"
-                  style={{
-                    width: '70%',
-                    height: '70%',
-                    objectFit: 'contain',
-                    filter: 'brightness(0) invert(1)',
-                  }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'block';
-                  }}
-                />
-                <PersonAddIcon 
-                  sx={{ 
-                    fontSize: { xs: 28, sm: 32 },
-                    color: 'white',
-                    display: 'none'
-                  }} 
-                />
-              </Box>
-              
-              <Typography
-                component="h1"
-                variant={isMobile ? "h5" : "h4"}
-                sx={{
-                  mt: 2,
-                  fontWeight: 700,
-                  color: '#1a2752',
-                  textAlign: 'center'
-                }}
-              >
-                Create Account
-              </Typography>
-              
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 1, textAlign: 'center', maxWidth: 400 }}
-              >
-                Join us today! Fill in your details to get started
-              </Typography>
-            </Box>
-          </motion.div>
+              <PersonAddIcon fontSize="large" />
+            </Avatar>
+            <Typography variant="h5" fontWeight={600} color="#1a2752" mb={0.5}>
+              Create Account
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Join us today! Fill in your details to get started
+            </Typography>
+          </Box>
 
           {/* Error Alert */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Alert 
-                  severity="error" 
-                  sx={{ 
-                    mb: 3, 
-                    borderRadius: 2,
-                    '& .MuiAlert-icon': {
-                      fontSize: 20
-                    }
-                  }}
-                >
-                  {error}
-                </Alert>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {generalError && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3, 
+                borderRadius: 1,
+                width: '100%',
+                maxWidth: 600,
+                mx: 'auto'
+              }}
+            >
+              {generalError}
+            </Alert>
+          )}
 
           {/* Form */}
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-            <Grid container spacing={2} justifyContent="center" alignItems="center">
+          <Box 
+            component="form" 
+            onSubmit={handleSubmit}
+            sx={{
+              width: '100%',
+              maxWidth: 700,
+              mx: 'auto'
+            }}
+          >
+            <Grid container spacing={2} justifyContent="center" alignItems="flex-start">
               {/* Name Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <TextField
-                    margin="normal"
-                    required
-                    fullWidth
-                    id="name"
-                    label="Full Name"
-                    name="name"
-                    autoComplete="name"
-                    autoFocus
-                    value={form.name}
-                    onChange={handleChange}
-                    error={!!fieldErrors.name}
-                    helperText={fieldErrors.name}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PersonIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
-                      }
-                    }}
-                  />
-                </motion.div>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="name"
+                  label="Full Name"
+                  value={form.name}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={Boolean(errors.name)}
+                  helperText={errors.name}
+                  autoComplete="name"
+                  sx={textFieldStyles}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonOutlined sx={{ color: '#666666' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: getValidationIcon('name') && (
+                      <InputAdornment position="end">
+                        {getValidationIcon('name')}
+                      </InputAdornment>
+                    ),
+                    style: { color: '#1a2752', fontSize: '16px', fontWeight: 500 }
+                  }}
+                  inputProps={{
+                    style: {
+                      color: '#1a2752',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      WebkitTextFillColor: '#1a2752'
+                    }
+                  }}
+                />
               </Grid>
 
               {/* Email Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <TextField
-                    margin="normal"
-                    required
-                    fullWidth
-                    id="email"
-                    label="Email Address"
-                    name="email"
-                    autoComplete="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    error={!!fieldErrors.email}
-                    helperText={fieldErrors.email}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <EmailIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
-                      }
-                    }}
-                  />
-                </motion.div>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="email"
+                  type="email"
+                  label="Email Address"
+                  value={form.email}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={Boolean(errors.email)}
+                  helperText={errors.email}
+                  autoComplete="email"
+                  sx={textFieldStyles}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <EmailOutlined sx={{ color: '#666666' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: getValidationIcon('email') && (
+                      <InputAdornment position="end">
+                        {getValidationIcon('email')}
+                      </InputAdornment>
+                    ),
+                    style: { color: '#1a2752', fontSize: '16px', fontWeight: 500 }
+                  }}
+                  inputProps={{
+                    style: {
+                      color: '#1a2752',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      WebkitTextFillColor: '#1a2752'
+                    }
+                  }}
+                />
               </Grid>
 
               {/* Password Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <TextField
-                    margin="normal"
-                    required
-                    fullWidth
-                    name="password"
-                    label="Password"
-                    type={showPassword ? 'text' : 'password'}
-                    id="password"
-                    autoComplete="new-password"
-                    value={form.password}
-                    onChange={handleChange}
-                    error={!!fieldErrors.password}
-                    helperText={fieldErrors.password}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LockIcon color="action" />
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <InputAdornment position="end">
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  label="Password"
+                  value={form.password}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={Boolean(errors.password)}
+                  helperText={errors.password}
+                  autoComplete="new-password"
+                  sx={textFieldStyles}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlined sx={{ color: '#666666' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Box display="flex" gap={0.5}>
+                          {getValidationIcon('password')}
                           <IconButton
-                            aria-label="toggle password visibility"
-                            onClick={togglePasswordVisibility}
+                            onClick={() => setShowPassword(!showPassword)}
                             edge="end"
                             size="small"
+                            sx={{ color: '#666666' }}
                           >
                             {showPassword ? <VisibilityOff /> : <Visibility />}
                           </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
-                      }
-                    }}
-                  />
-                </motion.div>
+                        </Box>
+                      </InputAdornment>
+                    ),
+                    style: { color: '#1a2752', fontSize: '16px', fontWeight: 500 }
+                  }}
+                  inputProps={{
+                    style: {
+                      color: '#1a2752',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      WebkitTextFillColor: '#1a2752'
+                    }
+                  }}
+                />
               </Grid>
 
               {/* Confirm Password Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <TextField
-                    margin="normal"
-                    required
-                    fullWidth
-                    name="confirmPassword"
-                    label="Confirm Password"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    id="confirmPassword"
-                    autoComplete="new-password"
-                    value={form.confirmPassword}
-                    onChange={handleChange}
-                    error={!!fieldErrors.confirmPassword}
-                    helperText={fieldErrors.confirmPassword}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LockIcon color="action" />
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <InputAdornment position="end">
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  label="Confirm Password"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={Boolean(errors.confirmPassword)}
+                  helperText={errors.confirmPassword}
+                  autoComplete="new-password"
+                  sx={textFieldStyles}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlined sx={{ color: '#666666' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Box display="flex" gap={0.5}>
+                          {getValidationIcon('confirmPassword')}
                           <IconButton
-                            aria-label="toggle confirm password visibility"
-                            onClick={toggleConfirmPasswordVisibility}
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                             edge="end"
                             size="small"
+                            sx={{ color: '#666666' }}
                           >
                             {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                           </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
-                      }
-                    }}
-                  />
-                </motion.div>
+                        </Box>
+                      </InputAdornment>
+                    ),
+                    style: { color: '#1a2752', fontSize: '16px', fontWeight: 500 }
+                  }}
+                  inputProps={{
+                    style: {
+                      color: '#1a2752',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      WebkitTextFillColor: '#1a2752'
+                    }
+                  }}
+                />
               </Grid>
 
               {/* Department Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <TextField
-                    margin="normal"
-                    required
-                    fullWidth
-                    id="department"
-                    label="Department"
-                    name="department"
-                    value={form.department}
-                    onChange={handleChange}
-                    error={!!fieldErrors.department}
-                    helperText={fieldErrors.department}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <BusinessIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
-                      }
-                    }}
-                  />
-                </motion.div>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="department"
+                  label="Department"
+                  value={form.department}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={Boolean(errors.department)}
+                  helperText={errors.department}
+                  sx={textFieldStyles}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <BusinessOutlined sx={{ color: '#666666' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: getValidationIcon('department') && (
+                      <InputAdornment position="end">
+                        {getValidationIcon('department')}
+                      </InputAdornment>
+                    ),
+                    style: { color: '#1a2752', fontSize: '16px', fontWeight: 500 }
+                  }}
+                  inputProps={{
+                    style: {
+                      color: '#1a2752',
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      WebkitTextFillColor: '#1a2752'
+                    }
+                  }}
+                />
               </Grid>
 
               {/* Role Field */}
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <motion.div variants={itemVariants} style={{ width: '100%' }}>
-                  <FormControl 
-                    fullWidth 
-                    margin="normal"
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth sx={textFieldStyles}>
+                  <InputLabel sx={{ color: '#666666', '&.Mui-focused': { color: '#1a2752' } }}>
+                    Role
+                  </InputLabel>
+                  <Select
+                    name="role"
+                    value={form.role}
+                    label="Role"
+                    onChange={handleChange}
                     sx={{
-                      width: '100%',
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.15)',
-                        },
-                        '&.Mui-focused': {
-                          boxShadow: '0 4px 20px rgba(220, 38, 127, 0.25)',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#dc267f',
-                          }
-                        }
+                      '& .MuiSelect-select': {
+                        color: '#1a2752 !important',
+                        fontSize: '16px',
+                        fontWeight: 500
                       },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#dc267f',
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#1a2752'
                       }
                     }}
+                    startAdornment={
+                      <InputAdornment position="start">
+                        {getRoleIcon(form.role)}
+                      </InputAdornment>
+                    }
                   >
-                    <InputLabel id="role-label">Role</InputLabel>
-                    <Select
-                      labelId="role-label"
-                      id="role"
-                      name="role"
-                      value={form.role}
-                      label="Role"
-                      onChange={handleChange}
-                      startAdornment={
-                        <InputAdornment position="start">
-                          {getRoleIcon(form.role)}
-                        </InputAdornment>
-                      }
-                    >
-                      <MenuItem value="user">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <PersonIcon fontSize="small" />
-                          User
-                        </Box>
-                      </MenuItem>
-                      <MenuItem value="coordinator">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <BusinessIcon fontSize="small" />
-                          Coordinator
-                        </Box>
-                      </MenuItem>
-                      <MenuItem value="admin">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <AdminIcon fontSize="small" />
-                          Admin
-                        </Box>
-                      </MenuItem>
-                    </Select>
-                  </FormControl>
-                </motion.div>
+                    <MenuItem value="user">
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <PersonOutlined fontSize="small" />
+                        User
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="coordinator">
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <BusinessOutlined fontSize="small" />
+                        Coordinator
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="admin">
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <AdminPanelSettingsOutlined fontSize="small" />
+                        Admin
+                      </Box>
+                    </MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
 
-            <motion.div variants={itemVariants}>
+            <Button
+              fullWidth
+              type="submit"
+              disabled={!isFormValid()}
+              endIcon={<PersonAddIcon />}
+              sx={{
+                mt: 3,
+                mb: 2,
+                py: 1.5,
+                borderRadius: 1.5,
+                fontSize: '1rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                maxWidth: 400,
+                mx: 'auto',
+                display: 'block',
+                background: isFormValid() 
+                  ? 'linear-gradient(45deg, #dc267f, #1a2752)' 
+                  : '#e0e0e0',
+                color: isFormValid() ? '#ffffff' : '#9e9e9e',
+                '&:hover': {
+                  background: isFormValid() 
+                    ? 'linear-gradient(45deg, #b91c5c, #1a2752)' 
+                    : '#e0e0e0'
+                },
+                '&:disabled': {
+                  background: '#e0e0e0',
+                  color: '#9e9e9e'
+                }
+              }}
+            >
+              Create Account
+            </Button>
+
+            <Box sx={{ textAlign: 'center', width: '100%' }}>
+              <Typography variant="body2" textAlign="center" color="text.secondary" mb={1}>
+                Already have an account?
+              </Typography>
+
               <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                disabled={loading}
+                variant="outlined"
+                onClick={() => navigate('/login')}
+                startIcon={<LoginOutlined />}
                 sx={{
-                  mt: 3,
-                  mb: 2,
-                  py: { xs: 1.5, sm: 2 },
-                  borderRadius: 2,
-                  fontSize: { xs: '1rem', sm: '1.1rem' },
-                  fontWeight: 600,
+                  borderRadius: 1.5,
+                  borderColor: '#1a2752',
+                  color: '#1a2752',
+                  fontWeight: 500,
                   textTransform: 'none',
-                  backgroundColor: loading ? 'rgba(220, 38, 127, 0.6)' : '#dc267f',
-                  color: '#ffffff',
-                  boxShadow: '0 8px 32px rgba(220, 38, 127, 0.4)',
+                  maxWidth: 400,
+                  width: { xs: '100%', sm: 'auto' },
+                  minWidth: 200,
                   '&:hover': {
-                    backgroundColor: loading ? 'rgba(220, 38, 127, 0.6)' : '#b91c5c',
-                    boxShadow: '0 12px 40px rgba(220, 38, 127, 0.5)',
-                    transform: 'translateY(-2px)',
-                  },
-                  '&:active': {
-                    transform: 'translateY(0)',
-                  },
-                  transition: 'all 0.3s ease',
+                    borderColor: '#dc267f',
+                    color: '#dc267f',
+                    background: 'rgba(220, 38, 127, 0.04)'
+                  }
                 }}
-                endIcon={loading ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : (
-                  <ArrowIcon />
-                )}
               >
-                {loading ? 'Creating Account...' : 'Create Account'}
+                Sign In Instead
               </Button>
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <Divider sx={{ my: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  OR
-                </Typography>
-              </Divider>
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Already have an account?
-                </Typography>
-                
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate('/login')}
-                  startIcon={<PersonIcon />}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    borderColor: '#1a2752',
-                    color: '#1a2752',
-                    py: { xs: 1, sm: 1.5 },
-                    px: { xs: 3, sm: 4 },
-                    '&:hover': {
-                      borderColor: '#dc267f',
-                      backgroundColor: 'rgba(220, 38, 127, 0.04)',
-                      color: '#dc267f',
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 20px rgba(220, 38, 127, 0.2)',
-                    },
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  Sign In Instead
-                </Button>
-              </Box>
-            </motion.div>
+            </Box>
           </Box>
+
+          <Typography 
+            variant="caption" 
+            color="text.secondary" 
+            sx={{ 
+              textAlign: 'center', 
+              display: 'block', 
+              mt: 2,
+              width: '100%'
+            }}
+          >
+            🔒 Secure & encrypted registration
+          </Typography>
         </Paper>
-      </motion.div>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 
