@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Container,
   Paper,
@@ -9,25 +9,20 @@ import {
   Alert,
   Avatar,
   CircularProgress,
-  useTheme,
-  useMediaQuery,
-  Divider,
   IconButton,
   InputAdornment,
-  FormControl,
-  FormHelperText,
-  Tooltip
+  Fade,
+  Slide
 } from '@mui/material';
 import {
-  LockOutlined as LockIcon,
+  LockOutlined,
   Visibility,
   VisibilityOff,
-  Email as EmailIcon,
-  Person as PersonIcon,
-  ArrowForward as ArrowIcon,
-  CheckCircle as CheckIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon
+  EmailOutlined,
+  PersonAddOutlined,
+  LoginOutlined,
+  CheckCircleOutlined,
+  ErrorOutlined
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
@@ -36,430 +31,315 @@ import { useNavigate } from 'react-router-dom';
 const Login = () => {
   const { login, loading } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
+  
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [fieldTouched, setFieldTouched] = useState({});
-  const [isFormValid, setIsFormValid] = useState(false);
-  const [validationStatus, setValidationStatus] = useState({});
-  const [attemptCount, setAttemptCount] = useState(0);
+  const [generalError, setGeneralError] = useState('');
 
-  // Enhanced validation rules
-  const validationRules = {
-    email: {
-      required: true,
-      pattern: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-      maxLength: 254,
-      messages: {
-        required: 'Email address is required',
-        pattern: 'Please enter a valid email address',
-        maxLength: 'Email address is too long'
-      }
+  // Validation rules
+  const validators = {
+    email: (value) => {
+      if (!value?.trim()) return 'Email is required';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Invalid email format';
+      return '';
     },
-    password: {
-      required: true,
-      minLength: 6,
-      maxLength: 128,
-      messages: {
-        required: 'Password is required',
-        minLength: 'Password must be at least 6 characters long',
-        maxLength: 'Password is too long'
-      }
+    password: (value) => {
+      if (!value) return 'Password is required';
+      if (value.length < 6) return 'Minimum 6 characters required';
+      return '';
     }
   };
 
-  // Real-time validation function
-  const validateField = (name, value) => {
-    const rules = validationRules[name];
-    if (!rules) return { isValid: true, message: '' };
-
-    // Required validation
-    if (rules.required && (!value || value.trim() === '')) {
-      return { isValid: false, message: rules.messages.required };
-    }
-
-    // Skip other validations if field is empty and not required
-    if (!value || value.trim() === '') {
-      return { isValid: true, message: '' };
-    }
-
-    // Pattern validation (for email)
-    if (rules.pattern && !rules.pattern.test(value)) {
-      return { isValid: false, message: rules.messages.pattern };
-    }
-
-    // Length validations
-    if (rules.minLength && value.length < rules.minLength) {
-      return { isValid: false, message: rules.messages.minLength };
-    }
-
-    if (rules.maxLength && value.length > rules.maxLength) {
-      return { isValid: false, message: rules.messages.maxLength };
-    }
-
-    return { isValid: true, message: '' };
-  };
-
-  // Validate entire form
-  const validateForm = () => {
-    const errors = {};
+  // Memoized validation status
+  const validationStatus = useMemo(() => {
     const status = {};
-    let isValid = true;
-
     Object.keys(form).forEach(field => {
-      const validation = validateField(field, form[field]);
-      if (!validation.isValid) {
-        errors[field] = validation.message;
-        status[field] = 'error';
-        isValid = false;
-      } else if (form[field] && form[field].trim() !== '') {
-        status[field] = 'success';
-      } else {
-        status[field] = '';
-      }
+      const error = validators[field]?.(form[field]);
+      const hasValue = Boolean(form[field]?.trim());
+      status[field] = error ? 'error' : hasValue ? 'success' : '';
     });
+    return status;
+  }, [form]);
 
-    return { errors, status, isValid };
-  };
+  const isFormValid = useMemo(() => 
+    Object.values(validators).every(validator => 
+      Object.keys(form).some(field => !validator(form[field]))
+    ) && form.email && form.password
+  , [form]);
 
-  // Handle input changes with real-time validation
-  const handleChange = (e) => {
+  // Event handlers
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
-
-    // Mark field as touched
-    setFieldTouched(prev => ({ ...prev, [name]: true }));
-
-    // Real-time validation for touched fields
-    if (fieldTouched[name] || attemptCount > 0) {
-      const validation = validateField(name, value);
-      
-      setFieldErrors(prev => ({
-        ...prev,
-        [name]: validation.isValid ? '' : validation.message
-      }));
-
-      setValidationStatus(prev => ({
-        ...prev,
-        [name]: validation.isValid ? (value ? 'success' : '') : 'error'
-      }));
-    }
-
-    // Clear general error when user starts typing
-    if (error) setError('');
-  };
-
-  // Handle field blur for validation
-  const handleBlur = (e) => {
-    const { name, value } = e.target;
-    setFieldTouched(prev => ({ ...prev, [name]: true }));
-
-    const validation = validateField(name, value);
-    setFieldErrors(prev => ({
-      ...prev,
-      [name]: validation.isValid ? '' : validation.message
-    }));
-
-    setValidationStatus(prev => ({
-      ...prev,
-      [name]: validation.isValid ? (value ? 'success' : '') : 'error'
-    }));
-  };
-
-  // Update form validity when form or errors change
-  useEffect(() => {
-    const { isValid } = validateForm();
-    setIsFormValid(isValid && form.email && form.password);
-  }, [form, fieldErrors]);
-
-  // Enhanced form submission with better error handling
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setAttemptCount(prev => prev + 1);
-
-    // Validate all fields
-    const { errors, status, isValid } = validateForm();
     
-    setFieldErrors(errors);
-    setValidationStatus(status);
-    setFieldTouched({ email: true, password: true });
+    if (touched[name]) {
+      const error = validators[name]?.(value) || '';
+      setErrors(prev => ({ ...prev, [name]: error }));
+    }
+    
+    if (generalError) setGeneralError('');
+  }, [touched, generalError]);
 
-    if (!isValid) {
-      setError('Please correct the errors below');
-      toast.error('Please fix the validation errors');
+  const handleBlur = useCallback((e) => {
+    const { name, value } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validators[name]?.(value) || '';
+    setErrors(prev => ({ ...prev, [name]: error }));
+  }, []);
+
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    
+    // Validate all fields
+    const newErrors = {};
+    Object.keys(validators).forEach(field => {
+      const error = validators[field](form[field]);
+      if (error) newErrors[field] = error;
+    });
+
+    setErrors(newErrors);
+    setTouched({ email: true, password: true });
+
+    if (Object.keys(newErrors).length > 0) {
+      setGeneralError('Please fix the errors below');
       return;
     }
 
-    setError('');
-    
     try {
       await login(form.email.trim(), form.password);
-      toast.success('Welcome back! Login successful.');
-      // Reset form on success
-      setForm({ email: '', password: '' });
-      setFieldTouched({});
-      setAttemptCount(0);
+      toast.success('Welcome back!');
     } catch (err) {
-      let errorMessage = 'Login failed. Please try again.';
-      
-      // Handle different types of errors
-      if (err.response?.status === 401) {
-        errorMessage = 'Invalid email or password. Please check your credentials.';
-      } else if (err.response?.status === 429) {
-        errorMessage = 'Too many login attempts. Please try again later.';
-      } else if (err.response?.status === 403) {
-        errorMessage = 'Account is locked or suspended. Please contact support.';
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-
-      setError(errorMessage);
-      toast.error(errorMessage);
-
-      // Add slight delay before allowing retry for security
-      setTimeout(() => {
-        setError('');
-      }, 5000);
+      const errorMsg = err.response?.status === 401 
+        ? 'Invalid credentials' 
+        : err.response?.data?.message || 'Login failed';
+      setGeneralError(errorMsg);
+      toast.error(errorMsg);
     }
-  };
+  }, [form, login]);
 
-  // Get field icon based on validation status
-  const getFieldIcon = (fieldName) => {
-    const status = validationStatus[fieldName];
-    if (status === 'success') return <CheckIcon sx={{ color: '#dc267f' }} />;
-    if (status === 'error') return <ErrorIcon sx={{ color: 'error.main' }} />;
-    return null;
-  };
-
-  // Security tips for password field
-  const passwordTips = [
-    'Use at least 6 characters',
-    'Include letters and numbers',
-    'Avoid common passwords'
-  ];
-
-  return (
-    <Container maxWidth="sm" sx={{
+  // Professional styling with browser compatibility
+  const styles = {
+    container: {
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      px: 2,
-    }}>
-      <Paper elevation={isMobile ? 2 : 6} sx={{
-        p: 4,
-        borderRadius: 3,
-        width: '100%',
-        background: '#ffffff',
-        border: '1px solid rgba(0,0,0,0.05)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-      }}>
-        <Box textAlign="center" mb={3}>
-          <Avatar sx={{
-            bgcolor: '#1a2752',
-            width: 72,
-            height: 72,
-            mx: 'auto',
-            mb: 1
-          }}>
-            <LockIcon fontSize="large" />
-          </Avatar>
-          <Typography variant="h5" fontWeight="bold">Welcome Back</Typography>
-          <Typography variant="body2" color="textSecondary">
-            Sign in to your account securely
-          </Typography>
-        </Box>
+      background: 'linear-gradient(135deg, #1a2752 0%, #dc267f 100%)',
+      padding: '1rem',
+      boxSizing: 'border-box'
+    },
+    paper: {
+      padding: '2.5rem',
+      borderRadius: '1rem',
+      background: 'rgba(255, 255, 255, 0.95)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)', // Safari support
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      width: '100%',
+      maxWidth: '400px',
+      position: 'relative',
+      overflow: 'hidden'
+    },
+    avatar: {
+      background: 'linear-gradient(45deg, #1a2752, #dc267f)',
+      width: 64,
+      height: 64,
+      margin: '0 auto 1rem'
+    },
+    textField: {
+      marginBottom: '1.5rem',
+      '& .MuiOutlinedInput-root': {
+        borderRadius: '0.75rem',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        '&:hover': {
+          transform: 'translateY(-1px)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+        },
+        '&.Mui-focused': {
+          transform: 'translateY(-1px)',
+          boxShadow: '0 4px 20px rgba(26, 39, 82, 0.2)',
+          '& fieldset': {
+            borderColor: '#1a2752'
+          }
+        }
+      },
+      '& .MuiOutlinedInput-input': {
+        padding: '1rem 0.875rem'
+      }
+    },
+    button: {
+      padding: '0.875rem',
+      borderRadius: '0.75rem',
+      fontSize: '1rem',
+      fontWeight: 600,
+      textTransform: 'none',
+      background: isFormValid 
+        ? 'linear-gradient(45deg, #dc267f, #1a2752)' 
+        : '#e0e0e0',
+      color: isFormValid ? '#ffffff' : '#9e9e9e',
+      border: 'none',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      '&:hover': {
+        transform: isFormValid ? 'translateY(-2px)' : 'none',
+        boxShadow: isFormValid ? '0 8px 25px rgba(220, 38, 127, 0.4)' : 'none',
+        background: isFormValid ? 'linear-gradient(45deg, #b91c5c, #1a2752)' : '#e0e0e0'
+      },
+      '&:disabled': {
+        background: '#e0e0e0',
+        color: '#9e9e9e'
+      }
+    },
+    createButton: {
+      borderRadius: '0.75rem',
+      borderColor: '#1a2752',
+      color: '#1a2752',
+      fontWeight: 500,
+      textTransform: 'none',
+      '&:hover': {
+        borderColor: '#dc267f',
+        color: '#dc267f',
+        background: 'rgba(220, 38, 127, 0.04)'
+      }
+    }
+  };
 
-        {error && (
-          <Alert 
-            severity="error" 
-            sx={{ mb: 2 }}
-            action={
-              <IconButton size="small" onClick={() => setError('')}>
-                ×
-              </IconButton>
-            }
-          >
-            {error}
-          </Alert>
-        )}
+  const getFieldIcon = (field) => {
+    const status = validationStatus[field];
+    if (status === 'success') return <CheckCircleOutlined sx={{ color: '#dc267f' }} />;
+    if (status === 'error') return <ErrorOutlined sx={{ color: '#f44336' }} />;
+    return null;
+  };
 
-        <Box component="form" onSubmit={handleSubmit} noValidate>
-          <FormControl fullWidth margin="normal">
+  return (
+    <Box sx={styles.container}>
+      <Slide direction="up" in timeout={600}>
+        <Paper elevation={0} sx={styles.paper}>
+          <Fade in timeout={800}>
+            <Box textAlign="center" mb={3}>
+              <Avatar sx={styles.avatar}>
+                <LockOutlined fontSize="large" />
+              </Avatar>
+              <Typography variant="h5" fontWeight={700} color="#1a2752" mb={0.5}>
+                Welcome Back
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Sign in to continue securely
+              </Typography>
+            </Box>
+          </Fade>
+
+          {generalError && (
+            <Fade in>
+              <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>
+                {generalError}
+              </Alert>
+            </Fade>
+          )}
+
+          <Box component="form" onSubmit={handleSubmit}>
             <TextField
-              required
-              label="Email Address"
+              fullWidth
               name="email"
               type="email"
+              label="Email Address"
               value={form.email}
               onChange={handleChange}
               onBlur={handleBlur}
+              error={Boolean(errors.email)}
+              helperText={errors.email}
               autoComplete="email"
-              autoFocus
+              sx={styles.textField}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <EmailIcon color={validationStatus.email === 'error' ? 'error' : 'action'} />
+                    <EmailOutlined color="action" />
                   </InputAdornment>
                 ),
                 endAdornment: getFieldIcon('email') && (
                   <InputAdornment position="end">
                     {getFieldIcon('email')}
                   </InputAdornment>
-                ),
-                style: { color: '#000' }
-              }}
-              inputProps={{ 
-                style: { color: '#000' },
-                maxLength: 254
-              }}
-              error={!!fieldErrors.email}
-              helperText={fieldErrors.email || (validationStatus.email === 'success' ? 'Valid email format ✓' : '')}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&.Mui-focused fieldset': {
-                    borderColor: validationStatus.email === 'error' ? 'error.main' : 
-                                validationStatus.email === 'success' ? '#dc267f' : '#1a2752'
-                  }
-                }
+                )
               }}
             />
-          </FormControl>
 
-          <FormControl fullWidth margin="normal">
             <TextField
-              required
-              label="Password"
+              fullWidth
               name="password"
               type={showPassword ? 'text' : 'password'}
+              label="Password"
               value={form.password}
               onChange={handleChange}
               onBlur={handleBlur}
+              error={Boolean(errors.password)}
+              helperText={errors.password}
               autoComplete="current-password"
+              sx={styles.textField}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <LockIcon color={validationStatus.password === 'error' ? 'error' : 'action'} />
+                    <LockOutlined color="action" />
                   </InputAdornment>
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Box display="flex" alignItems="center" gap={0.5}>
+                    <Box display="flex" gap={0.5}>
                       {getFieldIcon('password')}
-                      <Tooltip title={showPassword ? 'Hide password' : 'Show password'}>
-                        <IconButton 
-                          onClick={() => setShowPassword(!showPassword)} 
-                          size="small"
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </Tooltip>
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
                     </Box>
                   </InputAdornment>
-                ),
-                style: { color: '#000' }
-              }}
-              inputProps={{ 
-                style: { color: '#000' },
-                maxLength: 128
-              }}
-              error={!!fieldErrors.password}
-              helperText={fieldErrors.password}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&.Mui-focused fieldset': {
-                    borderColor: validationStatus.password === 'error' ? 'error.main' : 
-                                validationStatus.password === 'success' ? '#dc267f' : '#1a2752'
-                  }
-                }
+                )
               }}
             />
-            
-            {/* Password strength tips */}
-            {fieldTouched.password && !fieldErrors.password && form.password && (
-              <Box mt={1}>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5}>
-                  <InfoIcon fontSize="small" />
-                  Security tips: {passwordTips.join(' • ')}
-                </Typography>
-              </Box>
-            )}
-          </FormControl>
 
-          <Button
-            fullWidth
-            variant="contained"
-            type="submit"
-            disabled={loading || !isFormValid}
-            sx={{
-              mt: 3,
-              py: 1.5,
-              backgroundColor: isFormValid ? '#dc267f' : '#ccc',
-              color: '#fff',
-              fontWeight: 'bold',
-              textTransform: 'none',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: isFormValid ? '#b91c5c' : '#ccc',
-                transform: 'translateY(-1px)',
-                boxShadow: isFormValid ? '0 4px 12px rgba(220, 38, 127, 0.3)' : 'none'
-              },
-              '&:disabled': {
-                backgroundColor: '#ccc',
-                color: '#999'
-              }
-            }}
-            endIcon={loading ? <CircularProgress size={20} color="inherit" /> : <ArrowIcon />}
-          >
-            {loading ? 'Signing in...' : 'Sign In Securely'}
-          </Button>
+            <Button
+              fullWidth
+              type="submit"
+              disabled={loading || !isFormValid}
+              sx={styles.button}
+              endIcon={loading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <LoginOutlined />
+              )}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
 
-          {attemptCount > 0 && !loading && (
-            <Typography variant="caption" color="textSecondary" textAlign="center" display="block" mt={1}>
-              Attempt {attemptCount} • Your data is encrypted and secure
-            </Typography>
-          )}
+            <Box textAlign="center" my={2}>
+              <Typography variant="body2" color="text.secondary">
+                Don't have an account?
+              </Typography>
+            </Box>
 
-          <Divider sx={{ my: 3 }} />
+            <Button
+              fullWidth
+              variant="outlined"
+              onClick={() => navigate('/register')}
+              startIcon={<PersonAddOutlined />}
+              sx={styles.createButton}
+            >
+              Create Account
+            </Button>
+          </Box>
 
-          <Typography variant="body2" textAlign="center" mb={1}>
-            Don't have an account?
-          </Typography>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => navigate('/register')}
-            startIcon={<PersonIcon />}
-            sx={{
-              textTransform: 'none',
-              borderColor: '#1a2752',
-              color: '#1a2752',
-              '&:hover': {
-                borderColor: '#dc267f',
-                color: '#dc267f',
-                backgroundColor: 'rgba(220, 38, 127, 0.04)'
-              }
-            }}
-          >
-            Create New Account
-          </Button>
-
-          {/* Security notice */}
-          <Box mt={2} textAlign="center">
-            <Typography variant="caption" color="textSecondary">
-              🔒 Your connection is secure and encrypted
+          <Box textAlign="center" mt={2}>
+            <Typography variant="caption" color="text.secondary">
+              🔒 Secure & encrypted connection
             </Typography>
           </Box>
-        </Box>
-      </Paper>
-    </Container>
+        </Paper>
+      </Slide>
+    </Box>
   );
 };
 
