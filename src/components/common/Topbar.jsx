@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -25,7 +25,8 @@ import {
   Button,
   Skeleton,
   Paper,
-  Stack
+  Stack,
+  alpha
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -35,31 +36,23 @@ import {
   Person as PersonIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
-  Menu as MenuIcon,
   Close as CloseIcon,
-  Business as BusinessIcon,
   Task as TaskIcon,
-  Group as GroupIcon,
-  AdminPanelSettings as AdminIcon,
   Clear as ClearIcon,
   AccountCircle as AccountIcon,
-  Security as SecurityIcon,
   Help as HelpIcon,
-  Info as InfoIcon,
-  MoreVert as MoreIcon,
   Refresh as RefreshIcon,
   MarkEmailRead as MarkReadIcon,
-  KeyboardArrowDown as ArrowDownIcon,
-  Language as LanguageIcon,
   Fullscreen as FullscreenIcon,
   FullscreenExit as FullscreenExitIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import debounce from 'lodash/debounce';
 
 // Import your API functions and socket hook
-import { getUserNotifications, markNotificationAsRead} from '../../Api/notificationApi'; // Adjust path as needed
-import { performGlobalSearch } from '../../Api/searchApi'; // Adjust path as needed
-import { useSocket } from '../../contexts/SocketContext'; // Adjust path as needed
+import { getUserNotifications, markNotificationAsRead } from '../../Api/notificationApi';
+import { performGlobalSearch } from '../../Api/searchApi';
+import { useSocket } from '../../contexts/SocketContext';
 
 const Topbar = ({ 
   user = {}, 
@@ -88,9 +81,20 @@ const Topbar = ({
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const searchRef = useRef(null);
-  
 
-  // Fetch notifications on component mount
+  // Memoized values
+  const unreadNotifications = useMemo(
+    () => notifications.filter(n => !n.read).length,
+    [notifications]
+  );
+
+  const userInitial = useMemo(
+    () => user?.name?.charAt(0)?.toUpperCase() || 'U',
+    [user?.name]
+  );
+
+  // Navigation menu items
+  // Fetch notifications on mount
   useEffect(() => {
     fetchNotifications();
   }, []);
@@ -99,7 +103,7 @@ const Topbar = ({
     setNotificationsLoading(true);
     try {
       const res = await getUserNotifications();
-      setNotifications(res);
+      setNotifications(res || []);
     } catch (err) {
       console.error('Fetch notifications failed:', err);
       setNotifications([]);
@@ -108,22 +112,22 @@ const Topbar = ({
     }
   };
 
-  // Socket listener for real-time notifications
+  // Socket listener
   useEffect(() => {
     if (!socket) return;
     
-    socket.on('newNotification', (data) => {
+    const handleNewNotification = (data) => {
       setNotifications(prev => [data, ...prev]);
-    });
+    };
+
+    socket.on('newNotification', handleNewNotification);
 
     return () => {
-      socket.off('newNotification');
+      socket.off('newNotification', handleNewNotification);
     };
   }, [socket]);
 
-  const unreadNotifications = notifications.filter(n => !n.read).length;
-
-  // Enhanced event handlers with error handling
+  // Event handlers
   const handleUserMenuOpen = useCallback((event) => {
     setUserMenuAnchor(event.currentTarget);
   }, []);
@@ -152,76 +156,74 @@ const Topbar = ({
     }
   }, [onLogout, navigate, handleUserMenuClose]);
 
-  // Enhanced search with debouncing
+  // Debounced search
+  const debouncedSearch = useCallback(
+    debounce(async (value) => {
+      if (value.length > 2) {
+        setSearchLoading(true);
+        try {
+          const { tasks = [], users = [], notifications = [] } = await performGlobalSearch(value);
+          
+          const results = [
+            ...tasks.map(t => ({
+              type: 'task',
+              label: t.title,
+              sub: `Status: ${t.status}, Priority: ${t.priority}`,
+              path: `/tasks/${t._id}`,
+              status: t.status,
+              priority: t.priority
+            })),
+            ...users.map(u => ({
+              type: 'user',
+              label: u.name,
+              sub: u.email,
+              path: `/users/${u._id}`
+            })),
+            ...notifications.map(n => ({
+              type: 'notification',
+              label: n.message,
+              sub: new Date(n.createdAt).toLocaleString(),
+              path: `/notifications`
+            }))
+          ];
+          
+          setSearchResults(results);
+          setSearchOpen(true);
+        } catch (error) {
+          console.error('Search failed:', error);
+          setSearchResults([]);
+        } finally {
+          setSearchLoading(false);
+        }
+      } else {
+        setSearchResults([]);
+        setSearchOpen(false);
+      }
+    }, 300),
+    []
+  );
 
+  const handleSearch = useCallback((value) => {
+    setSearchValue(value);
+    debouncedSearch(value);
+  }, [debouncedSearch]);
 
-
-const handleSearch = useCallback(async (value) => {
-  setSearchValue(value);
-
-  if (value.length > 2) {
-    setSearchLoading(true);
-    
-    try {
-      const { tasks = [], users = [], notifications = [] } = await performGlobalSearch(value || '');
-
-
-      const taskResults = tasks.map((t) => ({
-        type: 'Task',
-        label: t.title,
-        sub: `Status: ${t.status}, Priority: ${t.priority}`,
-        path: `/tasks/${t._id}`,
-      }));
-
-      const userResults = users.map((u) => ({
-        type: 'User',
-        label: u.name,
-        sub: u.email,
-        path: `/users/${u._id}`,
-      }));
-
-      const notificationResults = notifications.map((n) => ({
-        type: 'Notification',
-        label: n.message,
-        sub: new Date(n.createdAt).toLocaleString(),
-        path: `/notifications`, // Or `/notifications/${n._id}` if detailed view exists
-      }));
-
-      const mergedResults = [...taskResults, ...userResults, ...notificationResults];
-
-      setSearchResults(mergedResults);
-      setSearchOpen(true);
-    } catch (error) {
-      console.error('Search failed:', error);
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
+  const handleSearchSelect = useCallback((result) => {
+    if (result?.path) {
+      navigate(result.path);
     }
-  } else {
+    clearSearch();
+    setShowMobileSearch(false);
+  }, [navigate]);
+
+  const clearSearch = useCallback(() => {
+    setSearchValue('');
     setSearchResults([]);
     setSearchOpen(false);
     setSearchLoading(false);
-  }
-}, []);
+    debouncedSearch.cancel();
+  }, [debouncedSearch]);
 
-const handleSearchSelect = useCallback((result) => {
-  if (result?.path) {
-    navigate(result.path);
-  }
-  setSearchValue('');
-  setSearchResults([]);
-  setSearchOpen(false);
-  setShowMobileSearch(false);
-}, [navigate]);
-
-const clearSearch = useCallback(() => {
-  setSearchValue('');
-  setSearchResults([]);
-  setSearchOpen(false);
-  setSearchLoading(false);
-}, []);
-
-  // Mark notification as read
   const handleMarkRead = async (id) => {
     try {
       await markNotificationAsRead(id);
@@ -236,7 +238,6 @@ const clearSearch = useCallback(() => {
   const markAllAsRead = useCallback(async () => {
     setNotificationsLoading(true);
     try {
-      // Assuming you have an API function to mark all as read
       const unreadIds = notifications.filter(n => !n.read).map(n => n._id);
       await Promise.all(unreadIds.map(id => markNotificationAsRead(id)));
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -247,86 +248,29 @@ const clearSearch = useCallback(() => {
     }
   }, [notifications]);
 
-  const refreshNotifications = useCallback(() => {
-    fetchNotifications();
-  }, []);
-
-  // Fullscreen functionality
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch(err => {
+      document.documentElement.requestFullscreen().catch(err => {
         console.log('Failed to enter fullscreen:', err);
       });
     } else {
-      document.exitFullscreen().then(() => {
-        setIsFullscreen(false);
-      }).catch(err => {
+      document.exitFullscreen().catch(err => {
         console.log('Failed to exit fullscreen:', err);
       });
     }
   }, []);
 
-  // Mobile sidebar toggle handler with proper event handling
-  const handleSidebarToggle = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    console.log('Sidebar toggle clicked'); // Debug log
-    if (onToggleSidebar) {
-      onToggleSidebar();
-    }
-  }, [onToggleSidebar]);
+  // Handle fullscreen state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
 
-  const getSearchIcon = (type) => {
-    switch (type) {
-      case 'task': return <TaskIcon fontSize="small" />;
-      case 'user': return <PersonIcon fontSize="small" />;
-      case 'department': return <BusinessIcon fontSize="small" />;
-      default: return <SearchIcon fontSize="small" />;
-    }
-  };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'task': return <TaskIcon fontSize="small" />;
-      case 'user': return <PersonIcon fontSize="small" />;
-      case 'meeting': return <GroupIcon fontSize="small" />;
-      case 'system': return <SettingsIcon fontSize="small" />;
-      default: return <NotificationsIcon fontSize="small" />;
-    }
-  };
-
-  const getNotificationColor = (type) => {
-    switch (type) {
-      case 'task': return '#1a2752';
-      case 'role': return '#dc267f';
-      case 'meeting': return '#ff9800';
-      case 'system': return '#4caf50';
-      default: return '#9e9e9e';
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return '#dc267f';
-      case 'medium': return '#ff9800';
-      case 'low': return '#4caf50';
-      default: return '#9e9e9e';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Active': 
-      case 'In Progress': return '#4caf50';
-      case 'Pending': return '#ff9800';
-      case 'Inactive': return '#9e9e9e';
-      default: return '#1a2752';
-    }
-  };
-
-  // Close search when clicking outside
+  // Close search on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -338,15 +282,26 @@ const clearSearch = useCallback(() => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Listen for fullscreen changes
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+  // Helper functions
+  const getSearchIcon = (type) => {
+    const icons = {
+      task: TaskIcon,
+      user: PersonIcon,
+      notification: NotificationsIcon
     };
+    const Icon = icons[type] || SearchIcon;
+    return <Icon fontSize="small" />;
+  };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  const getStatusColor = (status) => {
+    const colors = {
+      'Active': '#4caf50',
+      'In Progress': '#4caf50',
+      'Pending': '#ff9800',
+      'Inactive': '#9e9e9e'
+    };
+    return colors[status] || '#1a2752';
+  };
 
   return (
     <>
@@ -354,14 +309,11 @@ const clearSearch = useCallback(() => {
         position="fixed"
         elevation={0}
         sx={{
-          // Ensure high z-index to prevent overlapping
-          zIndex: (theme) => Math.max(theme.zIndex.drawer + 1, 1300),
+          zIndex: theme.zIndex.drawer + 1,
           background: 'linear-gradient(135deg, #1a2752 0%, #2a3f6f 100%)',
-          boxShadow: '0 4px 20px rgba(26, 39, 82, 0.15)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           backdropFilter: 'blur(10px)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          // Ensure the AppBar doesn't have pointer-events issues
-          pointerEvents: 'auto',
         }}
       >
         <Toolbar 
@@ -369,501 +321,86 @@ const clearSearch = useCallback(() => {
             px: { xs: 1, sm: 2, md: 3 }, 
             minHeight: { xs: 56, sm: 64 },
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
-            // Ensure toolbar has proper positioning
-            position: 'relative',
-            zIndex: 1,
+            alignItems: 'center'
           }}
         >
-          {/* Left Section - Mobile Menu + Logo */}
+          {/* Left Section - Logo only on desktop */}
           <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            minWidth: 0, 
-            flex: isMobile ? 1 : '0 0 auto',
-            // Ensure proper z-index for the left section
-            zIndex: 2,
+            flex: { xs: '0 0 auto', lg: '1 1 0' },
+            display: 'flex',
+            alignItems: 'center'
           }}>
-            {/* Mobile Menu Button with improved styling and event handling */}
-            {isMobile && (
-              <Tooltip title="Toggle Navigation">
-                <IconButton
-                  color="inherit"
-                  onClick={handleSidebarToggle}
-                  size="medium"
-                  sx={{ 
-                    mr: 1,
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    width: 44, // Increased size for better touch target
-                    height: 44,
-                    minWidth: 44, // Ensure minimum width
-                    minHeight: 44, // Ensure minimum height
-                    border: '1px solid rgba(255, 255, 255, 0.2)', // Added border for visibility
-                    // Ensure button is always clickable
-                    pointerEvents: 'auto',
-                    zIndex: 10, // High z-index to prevent overlapping
-                    position: 'relative', // Ensure proper stacking context
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.25)',
-                      borderColor: 'rgba(255, 255, 255, 0.4)',
-                    },
-                    // Ensure button is visible on all backgrounds
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-                  }}
-                >
-                  <MenuIcon 
-                    fontSize="medium" 
-                    sx={{ 
-                      color: 'white',
-                      // Ensure icon is properly positioned
-                      display: 'block',
-                    }} 
-                  />
-                </IconButton>
-              </Tooltip>
-            )}
-
-            {/* Logo and Title */}
-            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-              <Avatar
-                sx={{
-                  backgroundColor: '#dc267f',
-                  mr: { xs: 1, sm: 4 },
-                  width: { xs: 32, sm: 40 },
-                  height: { xs: 32, sm: 40 },
-                  display: { xs: isMobile ? 'flex' : 'none', sm: 'flex' },
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(220, 38, 127, 0.3)',
-                }}
-                onClick={() => navigate('/dashboard')}
-              >
-                <TaskIcon fontSize={isMobile ? 'small' : 'medium'} />
-              </Avatar>
-              
-              <Box sx={{ minWidth: 0 }}>
-                <Typography
-                  variant="h6"
+            {!isMobile && !isTablet && (
+              <>
+                <Avatar
                   sx={{
-                    fontWeight: 700,
-                    background: 'linear-gradient(45deg, #ffffff 30%, #e3f2fd 90%)',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    display: { xs: 'none', md: 'block' },
+                    backgroundColor: '#dc267f',
+                    mr: 2,
+                    width: 40,
+                    height: 40,
                     cursor: 'pointer',
-                    fontSize: { md: '1.1rem', lg: '1.25rem' },
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
                   }}
                   onClick={() => navigate('/dashboard')}
                 >
-                  Task & Asset Management
-                </Typography>
+                  <TaskIcon />
+                </Avatar>
                 <Typography
                   variant="h6"
+                  noWrap
+                  onClick={() => navigate('/dashboard')}
                   sx={{
                     fontWeight: 700,
                     color: 'white',
-                    display: { xs: 'block', md: 'none' },
                     cursor: 'pointer',
-                    fontSize: { xs: '1rem', sm: '1.1rem' }
                   }}
-                  onClick={() => navigate('/dashboard')}
                 >
-                  TAM
+                  Task & Asset Management
                 </Typography>
-                {!isMobile && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: 'rgba(255, 255, 255, 0.7)',
-                      display: { xs: 'none', lg: 'block' },
-                      fontSize: '0.7rem'
-                    }}
-                  >
-                    Professional Edition
-                  </Typography>
-                )}
-              </Box>
-            </Box>
+              </>
+            )}
           </Box>
 
-          {/* Center Section - Desktop Search Bar */}
-          {!isMobile && (
-            <Box
-              ref={searchRef}
-              sx={{
-                position: 'relative',
-                flex: '1 1 auto',
-                maxWidth: { md: 350, lg: 450 },
-                mx: { md: 2, lg: 3 }
-              }}
-            >
-              <TextField
-                placeholder="Search tasks, users, departments..."
-                value={searchValue}
-                onChange={(e) => handleSearch(e.target.value)}
-                size="small"
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      {searchLoading ? (
-                        <RefreshIcon 
-                          sx={{ 
-                            color: 'rgba(255, 255, 255, 0.7)', 
-                            fontSize: 20,
-                          }} 
-                        />
-                      ) : (
-                        <SearchIcon sx={{ color: 'rgba(255, 255, 255, 0.7)' }} />
-                      )}
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchValue && (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={clearSearch}
-                        sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
-                      >
-                        <ClearIcon fontSize="small" />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                  sx: {
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                    borderRadius: 3,
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      border: '1px solid rgba(255, 255, 255, 0.5)',
-                    },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      border: '2px solid #dc267f',
-                      boxShadow: '0 0 0 3px rgba(220, 38, 127, 0.1)',
-                    },
-                    '& .MuiInputBase-input': {
-                      color: 'white',
-                      '&::placeholder': {
-                        color: 'rgba(255, 255, 255, 0.7)',
-                        opacity: 1,
-                      },
-                    },
-                  }
-                }}
-              />
-
-              {/* Search Results Dropdown */}
-              {searchOpen && (searchResults.length > 0 || searchLoading) && (
-                <Paper
-                  elevation={8}
-                  sx={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    mt: 1,
-                    zIndex: 1300,
-                    maxHeight: 400,
-                    overflow: 'auto',
-                    borderRadius: 2,
-                    border: '1px solid rgba(26, 39, 82, 0.1)',
-                    '&::-webkit-scrollbar': { width: '6px' },
-                    '&::-webkit-scrollbar-thumb': { 
-                      backgroundColor: 'rgba(26, 39, 82, 0.3)',
-                      borderRadius: '3px'
-                    }
-                  }}
-                >
-                  {searchLoading ? (
-                    <Box sx={{ p: 2 }}>
-                      {[1, 2, 3].map((i) => (
-                        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                          <Skeleton variant="circular" width={40} height={40} />
-                          <Box sx={{ flexGrow: 1 }}>
-                            <Skeleton variant="text" width="80%" />
-                            <Skeleton variant="text" width="60%" />
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  ) : (
-                    <List sx={{ p: 0 }}>
-                      {searchResults.map((result, index) => (
-                        <ListItem
-                          key={`${result.type}-${result.label}-${index}`}
-                          button
-                          onClick={() => handleSearchSelect(result)}
-                          sx={{
-                            '&:hover': {
-                              backgroundColor: 'rgba(26, 39, 82, 0.04)',
-                            },
-                            borderBottom: index < searchResults.length - 1 ? '1px solid rgba(0, 0, 0, 0.1)' : 'none',
-                            py: 1.5
-                          }}
-                        >
-                          <ListItemIcon sx={{ minWidth: 45 }}>
-                            <Avatar
-                              sx={{
-                                width: 35,
-                                height: 35,
-                                backgroundColor: getStatusColor(result.status),
-                                fontSize: '0.875rem'
-                              }}
-                            >
-                              {getSearchIcon(result.type)}
-                            </Avatar>
-                          </ListItemIcon>
-                          <ListItemText
-                           primary={
-    <Typography
-      component="span"
-      variant="subtitle1"
-      sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}
-    >
-      {result.title || result.label}
-      <Chip
-        label={result.status}
-        size="small"
-        sx={{
-          backgroundColor: getStatusColor(result.status),
-          color: 'white',
-          fontSize: '0.7rem',
-          height: 20,
-          ml: 1,
-        }}
-      />
-    </Typography>
-  }
-  secondary={
-    <Typography component="span" variant="body2" color="text.secondary">
-      {result.description}
-    </Typography>
-  }
-/>
-
-<Typography
-  variant="caption"
-  sx={{
-    textTransform: 'capitalize',
-    color: 'text.secondary',
-    fontWeight: 500,
-    mt: 0.5,
-  }}
->
-  {result.type}
-                          </Typography>
-                        </ListItem>
-                      ))}
-                    </List>
-                  )}
-                  
-                  {!searchLoading && searchResults.length === 0 && searchValue.length > 2 && (
-                    <Box sx={{ p: 3, textAlign: 'center' }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No results found for "{searchValue}"
-                      </Typography>
-                    </Box>
-                  )}
-                </Paper>
-              )}
-            </Box>
-          )}
-
-          {/* Right Section - Controls */}
-          <Stack 
-            direction="row" 
-            spacing={{ xs: 0.5, sm: 1 }} 
-            alignItems="center"
-            sx={{ 
-              flex: '0 0 auto',
-              // Ensure right section has proper z-index
-              zIndex: 1,
+          {/* Center Section - Search Bar */}
+          <Box
+            ref={searchRef}
+            sx={{
+              position: 'relative',
+              flex: { xs: '1 1 auto', lg: '0 0 auto' },
+              maxWidth: { xs: '100%', sm: 400, md: 500, lg: 600 },
+              mx: { xs: 0, lg: 3 },
+              mr: { xs: 1, sm: 2 }
             }}
           >
-            {/* Mobile Search Button */}
-            {isMobile && (
-              <Tooltip title="Search">
-                <IconButton
-                  color="inherit"
-                  onClick={() => setShowMobileSearch(true)}
-                  size="small"
-                  sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    width: 36,
-                    height: 36,
-                  }}
-                >
-                  <SearchIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-
-            {/* Fullscreen Toggle - Desktop/Tablet Only */}
-            {!isMobile && (
-              <Tooltip title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}>
-                <IconButton
-                  color="inherit"
-                  onClick={toggleFullscreen}
-                  size={isTablet ? 'small' : 'medium'}
-                  sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    width: { sm: 36, md: 40 },
-                    height: { sm: 36, md: 40 },
-                  }}
-                >
-                  {isFullscreen ? 
-                    <FullscreenExitIcon fontSize={isTablet ? 'small' : 'medium'} /> : 
-                    <FullscreenIcon fontSize={isTablet ? 'small' : 'medium'} />
-                  }
-                </IconButton>
-              </Tooltip>
-            )}
-
-            {/* Dark Mode Toggle */}
-            <Tooltip title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-              <IconButton
-                color="inherit"
-                onClick={onToggleDarkMode}
-                size={isMobile ? 'small' : isTablet ? 'small' : 'medium'}
-                sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  width: { xs: 36, sm: 36, md: 40 },
-                  height: { xs: 36, sm: 36, md: 40 },
-                }}
-              >
-                {darkMode ? 
-                  <LightModeIcon fontSize={isMobile ? 'small' : isTablet ? 'small' : 'medium'} /> : 
-                  <DarkModeIcon fontSize={isMobile ? 'small' : isTablet ? 'small' : 'medium'} />
-                }
-              </IconButton>
-            </Tooltip>
-
-            {/* Notifications */}
-            <Tooltip title="Notifications">
-              <IconButton
-                color="inherit"
-                onClick={handleNotificationOpen}
-                size={isMobile ? 'small' : isTablet ? 'small' : 'medium'}
-                sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  width: { xs: 36, sm: 36, md: 40 },
-                  height: { xs: 36, sm: 36, md: 40 },
-                }}
-              >
-                <Badge 
-                  badgeContent={unreadNotifications} 
-                  color="error"
-                  sx={{
-                    '& .MuiBadge-badge': {
-                      fontSize: '0.7rem',
-                      height: 16,
-                      minWidth: 16,
-                    }
-                  }}
-                >
-                  <NotificationsIcon fontSize={isMobile ? 'small' : isTablet ? 'small' : 'medium'} />
-                </Badge>
-              </IconButton>
-            </Tooltip>
-
-            {/* User Menu */}
-            <Tooltip title="Account Menu">
-              <IconButton
-                onClick={handleUserMenuOpen}
-                sx={{
-                  p: 0,
-                  ml: { xs: 0.5, sm: 1 },
-                  border: '2px solid rgba(255, 255, 255, 0.3)',
-                  '&:hover': {
-                    borderColor: '#dc267f',
-                  }
-                }}
-              >
-                {loading ? (
-                  <Skeleton variant="circular" width={isMobile ? 36 : 40} height={isMobile ? 36 : 40} />
-                ) : (
-                  <Avatar
-                    sx={{
-                      backgroundColor: '#dc267f',
-                      width: { xs: 36, sm: 40 },
-                      height: { xs: 36, sm: 40 },
-                      fontSize: { xs: '0.9rem', sm: '1rem' },
-                      fontWeight: 600,
-                      boxShadow: '0 4px 12px rgba(220, 38, 127, 0.3)',
-                    }}
-                  >
-                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                  </Avatar>
-                )}
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </Toolbar>
-      </AppBar>
-
-      {/* Mobile Search Drawer */}
-      <Drawer
-        anchor="top"
-        open={showMobileSearch}
-        onClose={() => setShowMobileSearch(false)}
-        PaperProps={{
-          sx: {
-            background: 'linear-gradient(135deg, #1a2752 0%, #2a3f6f 100%)',
-            color: 'white',
-            // Ensure mobile search drawer has proper z-index
-            zIndex: 1400,
-          }
-        }}
-      >
-        <Box sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <TextField
-              autoFocus
-              placeholder="Search tasks, users, departments..."
+              placeholder="Search tasks, users, assets..."
               value={searchValue}
               onChange={(e) => handleSearch(e.target.value)}
+              size="small"
               fullWidth
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    {searchLoading ? (
-                      <RefreshIcon 
-                        sx={{ 
-                          color: 'rgba(255, 255, 255, 0.7)', 
-                          fontSize: 20,
-                        }} 
-                      />
-                    ) : (
-                      <SearchIcon sx={{ color: 'rgba(255, 255, 255, 0.7)' }} />
-                    )}
+                    <SearchIcon sx={{ color: 'rgba(255, 255, 255, 0.7)' }} />
                   </InputAdornment>
                 ),
                 endAdornment: searchValue && (
                   <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={clearSearch}
-                      sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
-                    >
-                      <ClearIcon fontSize="small" />
+                    <IconButton size="small" onClick={clearSearch}>
+                      <ClearIcon fontSize="small" sx={{ color: 'rgba(255, 255, 255, 0.7)' }} />
                     </IconButton>
                   </InputAdornment>
                 ),
                 sx: {
-                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  backgroundColor: alpha(theme.palette.common.white, 0.15),
                   borderRadius: 2,
                   '& .MuiOutlinedInput-notchedOutline': {
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    border: 'none',
                   },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    border: '2px solid #dc267f',
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.white, 0.25),
                   },
-                  '& .MuiInputBase-input': {
+                  '& input': {
                     color: 'white',
                     '&::placeholder': {
                       color: 'rgba(255, 255, 255, 0.7)',
@@ -873,199 +410,139 @@ const clearSearch = useCallback(() => {
                 }
               }}
             />
-            <IconButton
-              color="inherit"
-              onClick={() => setShowMobileSearch(false)}
-              sx={{
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                width: 36,
-                height: 36,
-                flexShrink: 0,
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)'
-                }
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
 
-          {/* Mobile Search Results */}
-          {searchLoading ? (
-            <Box sx={{ p: 1 }}>
-              {[1, 2, 3].map((i) => (
-                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, p: 1 }}>
-                  <Skeleton variant="circular" width={40} height={40} sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Skeleton variant="text" width="80%" sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
-                    <Skeleton variant="text" width="60%" sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          ) : searchResults.length > 0 ? (
-            <List sx={{ maxHeight: 300, overflow: 'auto' }}>
-              {searchResults.map((result, index) => (
-                <ListItem
-                  key={result.id}
-                  button
-                  onClick={() => handleSearchSelect(result)}
-                  sx={{
-                    borderRadius: 2,
-                    mb: 1,
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    }
-                  }}
-                >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 45 }}>
-                    <Avatar
+            {/* Search Results */}
+            {searchOpen && searchResults.length > 0 && (
+              <Paper
+                elevation={8}
+                sx={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  mt: 1,
+                  maxHeight: 400,
+                  overflow: 'auto',
+                  zIndex: theme.zIndex.modal,
+                }}
+              >
+                <List sx={{ p: 0 }}>
+                  {searchResults.map((result, index) => (
+                    <ListItem
+                      key={index}
+                      button
+                      onClick={() => handleSearchSelect(result)}
                       sx={{
-                        width: 35,
-                        height: 35,
-                        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                        color: 'white'
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        '&:last-child': { borderBottom: 0 }
                       }}
                     >
-                      {getSearchIcon(result.type)}
-                    </Avatar>
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'white' }}>
-                          {result.title}
-                        </Typography>
-                        <Chip
-                          label={result.status}
-                          size="small"
-                          sx={{
-                            backgroundColor: getStatusColor(result.status),
-                            color: 'white',
-                            fontSize: '0.7rem',
-                            height: 18
-                          }}
-                        />
-                      </Box>
-                    }
-                    secondary={
-                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                        {result.description}
-                      </Typography>
-                    }
-                  />
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      textTransform: 'capitalize',
-                      color: 'rgba(255, 255, 255, 0.7)',
-                      fontWeight: 500
-                    }}
-                  >
-                    {result.type}
-                  </Typography>
-                </ListItem>
-              ))}
-            </List>
-          ) : searchValue.length > 2 ? (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                No results found for "{searchValue}"
-              </Typography>
-            </Box>
-          ) : null}
-        </Box>
-      </Drawer>
+                      <ListItemIcon>
+                        <Avatar sx={{ width: 32, height: 32, backgroundColor: getStatusColor(result.status) }}>
+                          {getSearchIcon(result.type)}
+                        </Avatar>
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={result.label}
+                        secondary={result.sub}
+                        primaryTypographyProps={{ noWrap: true }}
+                        secondaryTypographyProps={{ noWrap: true }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            )}
+          </Box>
+
+          {/* Right Section - All Icons */}
+          <Stack 
+            direction="row" 
+            spacing={1} 
+            alignItems="center" 
+            sx={{ flex: { xs: '0 0 auto', lg: '1 1 0' }, justifyContent: 'flex-end' }}
+          >
+            {/* Fullscreen Toggle - Desktop Only */}
+            {!isMobile && !isTablet && (
+              <Tooltip title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}>
+                <IconButton color="inherit" onClick={toggleFullscreen}>
+                  {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Dark Mode Toggle */}
+            <Tooltip title={darkMode ? 'Light Mode' : 'Dark Mode'}>
+              <IconButton color="inherit" onClick={onToggleDarkMode}>
+                {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+              </IconButton>
+            </Tooltip>
+
+            {/* Notifications */}
+            <Tooltip title="Notifications">
+              <IconButton color="inherit" onClick={handleNotificationOpen}>
+                <Badge badgeContent={unreadNotifications} color="error">
+                  <NotificationsIcon />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+
+            {/* User Menu */}
+            <Tooltip title="Account">
+              <IconButton onClick={handleUserMenuOpen} sx={{ p: 0.5 }}>
+                <Avatar
+                  sx={{
+                    backgroundColor: '#dc267f',
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  {userInitial}
+                </Avatar>
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Toolbar>
+      </AppBar>
 
       {/* Notifications Popover */}
       <Popover
         open={Boolean(notificationAnchor)}
         anchorEl={notificationAnchor}
         onClose={handleNotificationClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         PaperProps={{
-          sx: {
-            width: { xs: '90vw', sm: 380 },
-            maxWidth: 400,
-            maxHeight: 500,
-            borderRadius: 3,
-            mt: 1,
-            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
-            border: '1px solid rgba(26, 39, 82, 0.1)',
-            // Ensure notifications popover has proper z-index
-            zIndex: 1350,
-          }
+          sx: { width: { xs: '90vw', sm: 360 }, maxWidth: 400, maxHeight: 500 }
         }}
       >
-        {/* Notifications Header */}
-        <Box sx={{ p: 2.5, borderBottom: '1px solid rgba(0, 0, 0, 0.1)' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: '#1a2752' }}>
-              Notifications
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Tooltip title="Refresh">
-                <IconButton
-                  size="small"
-                  onClick={refreshNotifications}
-                  disabled={notificationsLoading}
-                  sx={{ color: '#1a2752' }}
-                >
-                  <RefreshIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6">Notifications</Typography>
+            <Stack direction="row" spacing={1}>
+              <IconButton size="small" onClick={fetchNotifications}>
+                <RefreshIcon />
+              </IconButton>
               {unreadNotifications > 0 && (
-                <Tooltip title="Mark all as read">
-                  <IconButton
-                    size="small"
-                    onClick={markAllAsRead}
-                    disabled={notificationsLoading}
-                    sx={{ color: '#dc267f' }}
-                  >
-                    <MarkReadIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                <IconButton size="small" onClick={markAllAsRead}>
+                  <MarkReadIcon />
+                </IconButton>
               )}
-            </Box>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {unreadNotifications > 0 && (
-              <Chip
-                label={`${unreadNotifications} new`}
-                size="small"
-                sx={{
-                  backgroundColor: '#dc267f',
-                  color: 'white',
-                  fontWeight: 600,
-                }}
-              />
-            )}
-            <Typography variant="caption" color="text.secondary">
-              {notifications.length} total notifications
-            </Typography>
-          </Box>
+            </Stack>
+          </Stack>
         </Box>
 
-        {/* Notifications List */}
-        <List sx={{ p: 0, maxHeight: 320, overflow: 'auto' }}>
+        <List sx={{ maxHeight: 400, overflow: 'auto' }}>
           {notificationsLoading ? (
-            Array.from({ length: 3 }, (_, i) => (
-              <ListItem key={i} sx={{ py: 2 }}>
+            [...Array(3)].map((_, i) => (
+              <ListItem key={i}>
                 <ListItemIcon>
-                  <Skeleton variant="circular" width={45} height={45} />
+                  <Skeleton variant="circular" width={40} height={40} />
                 </ListItemIcon>
                 <ListItemText
-                  primary={<Skeleton variant="text" width="80%" />}
-                  secondary={<Skeleton variant="text" width="60%" />}
+                  primary={<Skeleton />}
+                  secondary={<Skeleton />}
                 />
               </ListItem>
             ))
@@ -1078,122 +555,34 @@ const clearSearch = useCallback(() => {
               />
             </ListItem>
           ) : (
-            notifications.map((notification, index) => (
+            notifications.map((notification) => (
               <ListItem
                 key={notification._id}
                 button
-                sx={{
-                  borderBottom: index < notifications.length - 1 ? '1px solid rgba(0, 0, 0, 0.1)' : 'none',
-                  backgroundColor: notification.read ? 'transparent' : 'rgba(220, 38, 127, 0.04)',
-                  '&:hover': {
-                    backgroundColor: notification.read ? 'rgba(26, 39, 82, 0.04)' : 'rgba(220, 38, 127, 0.08)',
-                  },
-                  py: 1.5,
-                  position: 'relative'
-                }}
                 onClick={() => handleMarkRead(notification._id)}
+                sx={{
+                  backgroundColor: notification.read ? 'transparent' : alpha(theme.palette.primary.main, 0.05),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  }
+                }}
               >
                 <ListItemIcon>
-                  <Avatar
-                    sx={{
-                      backgroundColor: getNotificationColor(notification.type),
-                      width: 45,
-                      height: 45,
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-                    }}
-                  >
-                    {getNotificationIcon(notification.type)}
+                  <Avatar sx={{ backgroundColor: notification.read ? 'grey.400' : 'primary.main' }}>
+                    <NotificationsIcon />
                   </Avatar>
                 </ListItemIcon>
                 <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography 
-                        variant="subtitle2" 
-                        sx={{ 
-                          fontWeight: notification.read ? 500 : 700,
-                          color: notification.read ? 'text.primary' : '#1a2752'
-                        }}
-                      >
-                        {notification.title || notification.message}
-                      </Typography>
-                      {notification.priority && (
-                        <Chip
-                          label={notification.priority}
-                          size="small"
-                          sx={{
-                            backgroundColor: getPriorityColor(notification.priority),
-                            color: 'white',
-                            fontSize: '0.65rem',
-                            height: 16,
-                            textTransform: 'capitalize'
-                          }}
-                        />
-                      )}
-                    </Box>
-                  }
-                  secondary={
-                    <Box>
-                      {notification.description && (
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
-                          sx={{ 
-                            mb: 0.5,
-                            fontWeight: notification.read ? 400 : 500
-                          }}
-                        >
-                          {notification.description}
-                        </Typography>
-                      )}
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(notification.createdAt).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  }
+                  primary={notification.message}
+                  secondary={new Date(notification.createdAt).toLocaleString()}
+                  primaryTypographyProps={{
+                    fontWeight: notification.read ? 400 : 600
+                  }}
                 />
-                {!notification.read && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: '#dc267f',
-                    }}
-                  />
-                )}
               </ListItem>
             ))
           )}
         </List>
-
-        {/* Notifications Footer */}
-        <Box sx={{ p: 2, borderTop: '1px solid rgba(0, 0, 0, 0.1)' }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            sx={{
-              borderColor: '#1a2752',
-              color: '#1a2752',
-              fontWeight: 600,
-              '&:hover': {
-                borderColor: '#dc267f',
-                color: '#dc267f',
-                backgroundColor: 'rgba(220, 38, 127, 0.04)'
-              },
-            }}
-            onClick={() => {
-              handleNotificationClose();
-              navigate('/notifications');
-            }}
-          >
-            View All Notifications
-          </Button>
-        </Box>
       </Popover>
 
       {/* User Menu */}
@@ -1202,201 +591,61 @@ const clearSearch = useCallback(() => {
         open={Boolean(userMenuAnchor)}
         onClose={handleUserMenuClose}
         PaperProps={{
-          sx: {
-            width: { xs: 260, sm: 280 },
-            borderRadius: 3,
-            mt: 1,
-            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
-            border: '1px solid rgba(26, 39, 82, 0.1)',
-            overflow: 'visible',
-            // Ensure user menu has proper z-index
-            zIndex: 1350,
-          }
+          sx: { width: 280, mt: 1 }
         }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        {/* User Info Header */}
-        <Box 
-          sx={{ 
-            p: 2.5, 
-            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-            background: 'linear-gradient(135deg, #f8faff 0%, #e3f2fd 100%)'
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {loading ? (
-              <>
-                <Skeleton variant="circular" width={54} height={54} />
-                <Box sx={{ flexGrow: 1 }}>
-                  <Skeleton variant="text" width="80%" />
-                  <Skeleton variant="text" width="60%" />
-                  <Skeleton variant="rectangular" width={60} height={20} sx={{ mt: 0.5, borderRadius: 1 }} />
-                </Box>
-              </>
-            ) : (
-              <>
-                <Avatar
-                  sx={{
-                    backgroundColor: '#1a2752',
-                    width: 54,
-                    height: 54,
-                    fontSize: '1.5rem',
-                    fontWeight: 700,
-                    boxShadow: '0 4px 12px rgba(26, 39, 82, 0.3)',
-                    flexShrink: 0
-                  }}
-                >
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                </Avatar>
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography 
-                    variant="h6" 
-                    sx={{ 
-                      fontWeight: 700, 
-                      color: '#1a2752',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {user?.name || 'User Name'}
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary" 
-                    sx={{ 
-                      mb: 0.5,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {user?.email || 'user@example.com'}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={user?.role || 'user'}
-                      size="small"
-                      icon={user?.role === 'admin' ? <AdminIcon /> : user?.role === 'coordinator' ? <BusinessIcon /> : <PersonIcon />}
-                      sx={{
-                        backgroundColor: user?.role === 'admin' ? '#dc267f' : user?.role === 'coordinator' ? '#ff9800' : '#4caf50',
-                        color: 'white',
-                        textTransform: 'capitalize',
-                        fontWeight: 600,
-                        fontSize: '0.75rem'
-                      }}
-                    />
-                    {user?.department && (
-                      <Typography variant="caption" color="text.secondary">
-                        {user.department}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
-              </>
-            )}
-          </Box>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Avatar sx={{ backgroundColor: 'primary.main', width: 48, height: 48 }}>
+              {userInitial}
+            </Avatar>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="subtitle1" noWrap fontWeight={600}>
+                {user?.name || 'User'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {user?.email || 'user@example.com'}
+              </Typography>
+              <Chip
+                label={user?.role || 'user'}
+                size="small"
+                sx={{ mt: 0.5, textTransform: 'capitalize' }}
+                color={user?.role === 'admin' ? 'error' : 'primary'}
+              />
+            </Box>
+          </Stack>
         </Box>
 
-        {/* Menu Items */}
-        <Box sx={{ py: 1 }}>
-          <MenuItem 
-            onClick={() => { 
-              handleUserMenuClose(); 
-              navigate('/profile'); 
-            }}
-            sx={{
-              py: 1.5,
-              '&:hover': {
-                backgroundColor: 'rgba(26, 39, 82, 0.04)',
-              }
-            }}
-          >
-            <ListItemIcon>
-              <Avatar sx={{ width: 35, height: 35, backgroundColor: '#1a2752' }}>
-                <AccountIcon fontSize="small" />
-              </Avatar>
-            </ListItemIcon>
-            <ListItemText
-              primary="My Profile"
-              secondary="View and edit your profile"
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-          </MenuItem>
+        <MenuItem onClick={() => { handleUserMenuClose(); navigate('/profile'); }}>
+          <ListItemIcon>
+            <AccountIcon />
+          </ListItemIcon>
+          <ListItemText primary="My Profile" />
+        </MenuItem>
 
-          <MenuItem 
-            onClick={() => { 
-              handleUserMenuClose(); 
-              navigate('/settings'); 
-            }}
-            sx={{
-              py: 1.5,
-              '&:hover': {
-                backgroundColor: 'rgba(26, 39, 82, 0.04)',
-              }
-            }}
-          >
-            <ListItemIcon>
-              <Avatar sx={{ width: 35, height: 35, backgroundColor: '#ff9800' }}>
-                <SettingsIcon fontSize="small" />
-              </Avatar>
-            </ListItemIcon>
-            <ListItemText
-              primary="Settings"
-              secondary="Preferences and configuration"
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-          </MenuItem>
+        <MenuItem onClick={() => { handleUserMenuClose(); navigate('/settings'); }}>
+          <ListItemIcon>
+            <SettingsIcon />
+          </ListItemIcon>
+          <ListItemText primary="Settings" />
+        </MenuItem>
 
-          <MenuItem 
-            onClick={() => { 
-              handleUserMenuClose(); 
-              navigate('/help'); 
-            }}
-            sx={{
-              py: 1.5,
-              '&:hover': {
-                backgroundColor: 'rgba(26, 39, 82, 0.04)',
-              }
-            }}
-          >
-            <ListItemIcon>
-              <Avatar sx={{ width: 35, height: 35, backgroundColor: '#4caf50' }}>
-                <HelpIcon fontSize="small" />
-              </Avatar>
-            </ListItemIcon>
-            <ListItemText
-              primary="Help & Support"
-              secondary="Documentation and support"
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-          </MenuItem>
-        </Box>
+        <MenuItem onClick={() => { handleUserMenuClose(); navigate('/help'); }}>
+          <ListItemIcon>
+            <HelpIcon />
+          </ListItemIcon>
+          <ListItemText primary="Help & Support" />
+        </MenuItem>
 
         <Divider />
 
-        {/* Logout */}
-        <MenuItem 
-          onClick={handleLogout} 
-          sx={{ 
-            py: 1.5,
-            color: '#dc267f',
-            '&:hover': {
-              backgroundColor: 'rgba(220, 38, 127, 0.04)',
-            }
-          }}
-        >
+        <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
           <ListItemIcon>
-            <Avatar sx={{ width: 35, height: 35, backgroundColor: '#dc267f' }}>
-              <LogoutIcon fontSize="small" sx={{ color: 'white' }} />
-            </Avatar>
+            <LogoutIcon color="error" />
           </ListItemIcon>
-          <ListItemText
-            primary="Logout"
-            secondary="Sign out of your account"
-            secondaryTypographyProps={{ variant: 'caption' }}
-          />
+          <ListItemText primary="Logout" />
         </MenuItem>
       </Menu>
     </>

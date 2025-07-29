@@ -60,9 +60,10 @@ const useResponsive = () => {
 const useSidebarState = (collapsed, isMobile) => {
   const [isHovered, setIsHovered] = useState(false);
   const [openSections, setOpenSections] = useState({});
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isExpanded = useMemo(() => {
-    if (isMobile) return false;
+    if (isMobile) return true; // Always expanded on mobile when open
     return !collapsed || isHovered;
   }, [isMobile, collapsed, isHovered]);
 
@@ -71,7 +72,9 @@ const useSidebarState = (collapsed, isMobile) => {
     setIsHovered,
     openSections,
     setOpenSections,
-    isExpanded
+    isExpanded,
+    mobileOpen,
+    setMobileOpen
   };
 };
 
@@ -166,14 +169,17 @@ const MENU_CONFIG = {
 };
 
 // Styled components using sx prop patterns
-const getDrawerStyles = (isExpanded, breakpoint, darkMode) => ({
+const getDrawerStyles = (isExpanded, breakpoint, darkMode, isMobile) => ({
   width: isExpanded ? 
-    (breakpoint === 'mobile' ? 320 : breakpoint === 'tablet' ? 260 : 300) :
+    (breakpoint === 'mobile' ? '85%' : breakpoint === 'tablet' ? 260 : 300) :
     (breakpoint === 'tablet' ? 70 : 80),
   '& .MuiDrawer-paper': {
     width: isExpanded ? 
-      (breakpoint === 'mobile' ? 320 : breakpoint === 'tablet' ? 260 : 300) :
+      (breakpoint === 'mobile' ? '85%' : breakpoint === 'tablet' ? 260 : 300) :
       (breakpoint === 'tablet' ? 70 : 80),
+    maxWidth: breakpoint === 'mobile' ? 320 : 'none',
+    top: isMobile ? 0 : 64, // Position below topbar on desktop/tablet
+    height: isMobile ? '100%' : 'calc(100% - 64px)', // Adjust height to account for topbar
     background: darkMode 
       ? 'linear-gradient(180deg, #2a3f6f 0%, #1a2752 100%)'
       : 'linear-gradient(180deg, #1a2752 0%, #2a3f6f 100%)',
@@ -348,9 +354,18 @@ const MenuItem = React.memo(({
   isActive = false, 
   showText = true, 
   openSections = {}, 
-  onToggleSection 
+  onToggleSection,
+  onNavigate
 }) => {
   const shouldShowTooltip = !showText && !isChild;
+  
+  const handleClick = () => {
+    if (item.hasSubmenu) {
+      onToggleSection(item.id);
+    } else if (item.path && onNavigate) {
+      onNavigate();
+    }
+  };
   
   return (
     <motion.div
@@ -367,7 +382,7 @@ const MenuItem = React.memo(({
         <ListItem
           component={item.path ? NavLink : 'div'}
           to={item.path || undefined}
-          onClick={item.hasSubmenu ? () => onToggleSection(item.id) : undefined}
+          onClick={handleClick}
           sx={getListItemStyles(isActive, isChild, showText)}
         >
           <ListItemIcon
@@ -452,7 +467,8 @@ const NavigationContent = React.memo(({
   openSections, 
   onToggleSection,
   isActive,
-  isExactActive 
+  isExactActive,
+  onNavigate
 }) => (
   <>
     <Box sx={{ flexGrow: 1, overflow: 'auto', py: 1 }}>
@@ -465,6 +481,7 @@ const NavigationContent = React.memo(({
               showText={showText}
               openSections={openSections}
               onToggleSection={onToggleSection}
+              onNavigate={onNavigate}
             />
             
             {item.hasSubmenu && showText && (
@@ -485,6 +502,7 @@ const NavigationContent = React.memo(({
                             isChild
                             isActive={isExactActive(child.path)}
                             showText={showText}
+                            onNavigate={onNavigate}
                           />
                         ))}
                       </List>
@@ -509,6 +527,7 @@ const NavigationContent = React.memo(({
             item={item}
             isActive={isExactActive(item.path)}
             showText={showText}
+            onNavigate={onNavigate}
           />
         ))}
       </List>
@@ -548,45 +567,40 @@ const NavigationContent = React.memo(({
   </>
 ));
 
-const MobileFAB = React.memo(({ onOpen, darkMode }) => (
-  <motion.div
-    initial={{ scale: 0 }}
-    animate={{ scale: 1 }}
-    whileHover={{ scale: 1.1 }}
-    whileTap={{ scale: 0.9 }}
-    style={{ 
-      position: 'fixed', 
-      top: 20, 
-      left: 20, 
-      zIndex: 1300,
-      pointerEvents: 'auto'
+const MobileFAB = React.memo(({ onClick, darkMode }) => (
+  <Box
+    sx={{
+      position: 'fixed',
+      bottom: 20,
+      right: 20,
+      zIndex: 1200, // Lower than topbar (1300)
     }}
   >
     <Fab
-      size="medium"
-      onClick={() => {
-        console.log('FAB clicked'); // Debug log
-        if (onOpen) onOpen();
-      }}
+      size="large"
+      onClick={onClick}
       sx={{
         background: darkMode 
           ? 'linear-gradient(135deg, #2a3f6f 0%, #1a2752 100%)'
           : 'linear-gradient(135deg, #dc267f 0%, #b91c5c 100%)',
         color: 'white',
-        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)',
+        boxShadow: '0 8px 25px rgba(220, 38, 127, 0.4)',
         border: '2px solid rgba(255, 255, 255, 0.2)',
         '&:hover': {
-          boxShadow: '0 12px 35px rgba(0, 0, 0, 0.4)',
-          transform: 'translateY(-2px)'
+          background: darkMode 
+            ? 'linear-gradient(135deg, #3a4f7f 0%, #2a3762 100%)'
+            : 'linear-gradient(135deg, #e91e63 0%, #c2185b 100%)',
+          boxShadow: '0 12px 35px rgba(220, 38, 127, 0.5)',
+          transform: 'scale(1.05)'
         },
         '&:active': {
           transform: 'scale(0.95)'
         }
       }}
     >
-      <Menu sx={{ fontSize: 24 }} />
+      <Menu sx={{ fontSize: 28 }} />
     </Fab>
-  </motion.div>
+  </Box>
 ));
 
 // Main Sidebar Component
@@ -606,7 +620,9 @@ const Sidebar = ({
     setIsHovered, 
     openSections, 
     setOpenSections, 
-    isExpanded 
+    isExpanded,
+    mobileOpen,
+    setMobileOpen
   } = useSidebarState(collapsed, isMobile);
 
   // Event handlers
@@ -623,6 +639,21 @@ const Sidebar = ({
       setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
     }
   }, [isMobile, isExpanded]);
+
+  const handleMobileOpen = useCallback(() => {
+    setMobileOpen(true);
+  }, []);
+
+  const handleMobileClose = useCallback(() => {
+    setMobileOpen(false);
+    if (onClose) onClose();
+  }, [onClose]);
+
+  const handleNavigate = useCallback(() => {
+    if (isMobile) {
+      handleMobileClose();
+    }
+  }, [isMobile, handleMobileClose]);
 
   // Active path detection
   const isActive = useCallback((paths) => 
@@ -651,24 +682,55 @@ const Sidebar = ({
     setOpenSections(newOpenSections);
   }, [location, filteredMenuItems]);
 
+  // Sync mobile open state with parent prop
+  useEffect(() => {
+    if (isMobile && open !== undefined) {
+      setMobileOpen(open);
+    }
+  }, [isMobile, open]);
+
   const breakpoint = isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop';
-  const drawerStyles = getDrawerStyles(isExpanded, breakpoint, darkMode);
+  const drawerStyles = getDrawerStyles(isExpanded, breakpoint, darkMode, isMobile);
+
+  // Add CSS animation keyframes
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   // Mobile view
   if (isMobile) {
     return (
       <>
-        {!open && <MobileFAB onOpen={onOpen} darkMode={darkMode} />}
+        <MobileFAB onClick={handleMobileOpen} darkMode={darkMode} />
         <Drawer
           variant="temporary"
-          open={open}
-          onClose={onClose}
-          ModalProps={{ keepMounted: true }}
+          open={mobileOpen}
+          onClose={handleMobileClose}
+          ModalProps={{ 
+            keepMounted: true,
+            BackdropProps: {
+              sx: {
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                backdropFilter: 'blur(4px)'
+              }
+            }
+          }}
           sx={{
             ...drawerStyles,
-            '& .MuiDrawer-backdrop': {
-              bgcolor: 'rgba(0, 0, 0, 0.7)',
-              backdropFilter: 'blur(8px)'
+            zIndex: 1250, // Below topbar but above content
+            '& .MuiDrawer-paper': {
+              ...drawerStyles['& .MuiDrawer-paper'],
+              position: 'fixed',
+              zIndex: 1250
             }
           }}
         >
@@ -678,7 +740,7 @@ const Sidebar = ({
               isMobile={true} 
               userRole={userRole}
               darkMode={darkMode}
-              onClose={onClose} 
+              onClose={handleMobileClose} 
             />
             <NavigationContent
               menuItems={filteredMenuItems}
@@ -688,6 +750,7 @@ const Sidebar = ({
               onToggleSection={toggleSection}
               isActive={isActive}
               isExactActive={isExactActive}
+              onNavigate={handleNavigate}
             />
           </Box>
         </Drawer>
@@ -701,7 +764,14 @@ const Sidebar = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <Drawer variant="permanent" sx={drawerStyles}>
+      <Drawer variant="permanent" sx={{
+        ...drawerStyles,
+        '& .MuiDrawer-paper': {
+          ...drawerStyles['& .MuiDrawer-paper'],
+          position: 'fixed',
+          zIndex: 1100 // Well below topbar
+        }
+      }}>
         <LogoSection 
           isExpanded={isExpanded} 
           isMobile={false} 
@@ -717,6 +787,7 @@ const Sidebar = ({
           onToggleSection={toggleSection}
           isActive={isActive}
           isExactActive={isExactActive}
+          onNavigate={handleNavigate}
         />
       </Drawer>
     </motion.div>
