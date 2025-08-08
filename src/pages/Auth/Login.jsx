@@ -9,7 +9,8 @@ import {
   Alert,
   Avatar,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  CircularProgress
 } from '@mui/material';
 import {
   LockOutlined,
@@ -28,12 +29,13 @@ import { useNavigate } from 'react-router-dom';
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  
+
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [generalError, setGeneralError] = useState('');
+  const [submitting, setSubmitting] = useState(false); // NEW
 
   // Validation
   const validate = (field, value) => {
@@ -54,28 +56,28 @@ const Login = () => {
   const getValidationIcon = (field) => {
     if (!touched[field] || !form[field]) return null;
     const error = validate(field, form[field]);
-    return error ? 
-      <ErrorOutlined sx={{ color: '#f44336', fontSize: 20 }} /> :
-      <CheckCircleOutlined sx={{ color: '#dc267f', fontSize: 20 }} />;
+    return error
+      ? <ErrorOutlined sx={{ color: '#f44336', fontSize: 20 }} />
+      : <CheckCircleOutlined sx={{ color: '#dc267f', fontSize: 20 }} />;
   };
 
   const isFormValid = () => {
-    return form.email && 
-           form.password && 
-           !validate('email', form.email) && 
-           !validate('password', form.password);
+    return form.email &&
+      form.password &&
+      !validate('email', form.email) &&
+      !validate('password', form.password);
   };
 
   // Event handlers
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
-    
+
     if (touched[name]) {
       const error = validate(name, value);
       setErrors(prev => ({ ...prev, [name]: error }));
     }
-    
+
     if (generalError) setGeneralError('');
   }, [touched, generalError]);
 
@@ -88,7 +90,8 @@ const Login = () => {
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    
+
+    if (submitting) return;            // NEW: guard against double submit
     const newErrors = {};
     ['email', 'password'].forEach(field => {
       const error = validate(field, form[field]);
@@ -103,20 +106,28 @@ const Login = () => {
     }
 
     try {
+      setSubmitting(true);             // NEW: start loading
       await login(form.email.trim(), form.password);
       toast.success('Welcome back!');
     } catch (err) {
-      const errorMsg = err.response?.status === 401 
-        ? 'Invalid credentials' 
-        : err.response?.data?.message || 'Login failed';
+      const status = err?.response?.status;
+      const apiMsg = err?.response?.data?.message;
+
+      let errorMsg = 'Login failed';
+      if (status === 401) errorMsg = 'Invalid credentials';
+      else if (status === 429) errorMsg = apiMsg || 'Too many attempts. Please wait a moment and try again.';
+      else if (apiMsg) errorMsg = apiMsg;
+
       setGeneralError(errorMsg);
       toast.error(errorMsg);
+    } finally {
+      setSubmitting(false);            // NEW: stop loading
     }
-  }, [form, login]);
+  }, [form, login, submitting]);
 
   return (
-    <Container 
-      maxWidth="sm" 
+    <Container
+      maxWidth="sm"
       sx={{
         minHeight: '100vh',
         display: 'flex',
@@ -126,7 +137,7 @@ const Login = () => {
         p: 2
       }}
     >
-      <Paper 
+      <Paper
         elevation={8}
         sx={{
           p: 4,
@@ -138,7 +149,7 @@ const Login = () => {
       >
         {/* Header */}
         <Box textAlign="center" mb={3}>
-          <Avatar 
+          <Avatar
             sx={{
               background: 'linear-gradient(45deg, #1a2752, #dc267f)',
               width: 60,
@@ -177,7 +188,8 @@ const Login = () => {
             error={Boolean(errors.email)}
             helperText={errors.email}
             autoComplete="email"
-            sx={{ 
+            disabled={submitting}                 // NEW
+            sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
                 borderRadius: 1.5,
@@ -247,7 +259,8 @@ const Login = () => {
             error={Boolean(errors.password)}
             helperText={errors.password}
             autoComplete="current-password"
-            sx={{ 
+            disabled={submitting}                 // NEW
+            sx={{
               mb: 3,
               '& .MuiOutlinedInput-root': {
                 borderRadius: 1.5,
@@ -294,6 +307,7 @@ const Login = () => {
                       edge="end"
                       size="small"
                       sx={{ color: '#666666' }}
+                      disabled={submitting}       // NEW
                     >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
@@ -319,23 +333,23 @@ const Login = () => {
           <Button
             fullWidth
             type="submit"
-            disabled={!isFormValid()}
-            endIcon={<LoginOutlined />}
+            disabled={!isFormValid() || submitting}               // UPDATED
+            endIcon={submitting ? <CircularProgress size={18} /> : <LoginOutlined />} // UPDATED
             sx={{
               py: 1.5,
               borderRadius: 1.5,
               fontSize: '1rem',
               fontWeight: 600,
               textTransform: 'none',
-              background: isFormValid() 
-                ? 'linear-gradient(45deg, #dc267f, #1a2752)' 
-                : '#e0e0e0',
-              color: isFormValid() ? '#ffffff' : '#9e9e9e',
+              background: (!isFormValid() || submitting)
+                ? '#e0e0e0'
+                : 'linear-gradient(45deg, #dc267f, #1a2752)',
+              color: (!isFormValid() || submitting) ? '#9e9e9e' : '#ffffff',
               mb: 2,
               '&:hover': {
-                background: isFormValid() 
-                  ? 'linear-gradient(45deg, #b91c5c, #1a2752)' 
-                  : '#d1d1d1ff'
+                background: (!isFormValid() || submitting)
+                  ? '#d1d1d1ff'
+                  : 'linear-gradient(45deg, #b91c5c, #1a2752)'
               },
               '&:disabled': {
                 background: '#ceccccff',
@@ -343,7 +357,7 @@ const Login = () => {
               }
             }}
           >
-            Sign In
+            {submitting ? 'Signing in…' : 'Sign In'}
           </Button>
 
           <Typography variant="body2" textAlign="center" color="text.secondary" mb={1}>
@@ -355,6 +369,7 @@ const Login = () => {
             variant="outlined"
             onClick={() => navigate('/register')}
             startIcon={<PersonAddOutlined />}
+            disabled={submitting}                          // NEW
             sx={{
               borderRadius: 1.5,
               borderColor: '#1a2752',

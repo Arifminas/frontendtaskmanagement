@@ -13,7 +13,7 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!token || !isAuthenticated) return;
 
-    const newSocket = io(import.meta.env.VITE_API_BASE_URL || 'http://localhost:5050', {
+    const newSocket = io(import.meta.env.VITE_SOCKET_URL|| 'http://localhost:5050', {
       path: '/socket.io',
       auth: {
         token: token,

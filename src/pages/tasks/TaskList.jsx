@@ -44,7 +44,10 @@ import {
   AccordionSummary,
   AccordionDetails,
   AppBar,
-  Toolbar
+  Toolbar,
+  FormControlLabel,
+  Switch,
+  Badge
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -73,7 +76,12 @@ import {
   Menu as MenuIcon,
   ViewModule as ViewModuleIcon,
   ViewList as ViewListIcon,
-  Sort as SortIcon
+  Sort as SortIcon,
+  SortByAlpha as SortByAlphaIcon,
+  AccessTime as AccessTimeIcon,
+  DateRange as DateRangeIcon,
+  Today as TodayIcon,
+  FilterAlt as FilterAltIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchMyTasks, updateTaskStatus } from '../../Api/tasks';
@@ -271,6 +279,49 @@ const DueDateWarning = ({ dueDate, size = 'medium' }) => {
   return null;
 };
 
+// Last Updated Badge Component
+const LastUpdatedBadge = ({ updatedAt, size = 'medium' }) => {
+  if (!updatedAt) return null;
+
+  const updated = new Date(updatedAt);
+  const now = new Date();
+  const diffHours = (now - updated) / (1000 * 60 * 60);
+  const diffDays = diffHours / 24;
+
+  let label = '';
+  let color = '#9e9e9e';
+
+  if (diffHours < 1) {
+    label = 'Just updated';
+    color = '#4caf50';
+  } else if (diffHours < 24) {
+    label = `${Math.floor(diffHours)}h ago`;
+    color = '#ff9800';
+  } else if (diffDays < 7) {
+    label = `${Math.floor(diffDays)}d ago`;
+    color = '#9e9e9e';
+  } else {
+    label = updated.toLocaleDateString();
+    color = '#9e9e9e';
+  }
+
+  return (
+    <Chip
+      icon={<AccessTimeIcon />}
+      label={label}
+      size={size === 'large' ? 'medium' : 'small'}
+      sx={{
+        backgroundColor: color,
+        color: 'white',
+        fontWeight: 600,
+        fontSize: size === 'large' ? '0.875rem' : '0.75rem',
+        height: size === 'large' ? 32 : 24,
+        ml: 1
+      }}
+    />
+  );
+};
+
 // Responsive Task View Modal Component
 const TaskViewModal = ({ open, onClose, task, onEdit }) => {
   const theme = useTheme();
@@ -396,6 +447,7 @@ const TaskViewModal = ({ open, onClose, task, onEdit }) => {
               }}>
                 <StatusBadge status={task.status} size={isMobile ? 'medium' : 'large'} />
                 <PriorityBadge priority={task.priority} size={isMobile ? 'medium' : 'large'} />
+                <LastUpdatedBadge updatedAt={task.updatedAt} size={isMobile ? 'medium' : 'large'} />
               </Box>
 
               {task.description && (
@@ -453,7 +505,7 @@ const TaskViewModal = ({ open, onClose, task, onEdit }) => {
                 <AssigneeAvatars assignees={task.assignees} maxDisplay={isMobile ? 3 : 5} />
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1a2752', mb: 1 }}>
                   <CalendarIcon sx={{ mr: 1, fontSize: 20 }} />
                   Due Date
@@ -464,6 +516,16 @@ const TaskViewModal = ({ open, onClose, task, onEdit }) => {
                   </Typography>
                   <DueDateWarning dueDate={task.dueDate} />
                 </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1a2752', mb: 1 }}>
+                  <AccessTimeIcon sx={{ mr: 1, fontSize: 20 }} />
+                  Last Updated
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  {task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Not available'}
+                </Typography>
               </Grid>
             </Grid>
 
@@ -701,6 +763,7 @@ const TaskCard = ({ task, onEdit, onStatusUpdate, onViewAttachments, onToggleCom
             }}>
               <StatusBadge status={task.status} size="small" />
               <PriorityBadge priority={task.priority} size="small" />
+              <LastUpdatedBadge updatedAt={task.updatedAt} size="small" />
             </Box>
           </Box>
 
@@ -768,6 +831,15 @@ const TaskCard = ({ task, onEdit, onStatusUpdate, onViewAttachments, onToggleCom
                   {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'}
                 </Typography>
                 <DueDateWarning dueDate={task.dueDate} size="small" />
+              </Box>
+            </Grid>
+            {/* Last Updated Row */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AccessTimeIcon fontSize="small" color="action" />
+                <Typography variant="body2" color="text.secondary">
+                  Updated: {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : 'N/A'}
+                </Typography>
               </Box>
             </Grid>
             {/* Assignees Row */}
@@ -908,7 +980,11 @@ const ResponsiveHeader = ({
   setShowFilters, 
   navigate,
   filteredTasksCount,
-  totalTasksCount 
+  totalTasksCount,
+  sortBy,
+  setSortBy,
+  sortOrder,
+  setSortOrder
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -991,6 +1067,54 @@ const ResponsiveHeader = ({
               />
             </Box>
 
+            {/* Sort Controls Mobile */}
+            <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+              <FormControl size="small" sx={{ flex: 1 }}>
+                <InputLabel sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Sort By</InputLabel>
+                <Select
+                  value={sortBy}
+                  label="Sort By"
+                  onChange={(e) => setSortBy(e.target.value)}
+                  sx={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    color: 'white',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      border: '1px solid rgba(255, 255, 255, 0.5)',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      border: '2px solid #dc267f',
+                    },
+                    '& .MuiSvgIcon-root': {
+                      color: 'white',
+                    },
+                  }}
+                >
+                  <MenuItem value="updatedAt">Last Updated</MenuItem>
+                  <MenuItem value="createdAt">Created Date</MenuItem>
+                  <MenuItem value="dueDate">Due Date</MenuItem>
+                  <MenuItem value="priority">Priority</MenuItem>
+                  <MenuItem value="status">Status</MenuItem>
+                  <MenuItem value="title">Title</MenuItem>
+                </Select>
+              </FormControl>
+              
+              <IconButton
+                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                sx={{
+                  color: 'white',
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                  },
+                }}
+              >
+                <SortIcon sx={{ transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
+              </IconButton>
+            </Box>
+
             {/* Action Buttons */}
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'center' }}>
               <Button
@@ -1040,7 +1164,7 @@ const ResponsiveHeader = ({
             
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
               {/* Search Bar */}
-              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: isTablet ? '250px' : '300px' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: isTablet ? '200px' : '250px' }}>
                 <TextField
                   size="small"
                   placeholder="Search tasks..."
@@ -1082,6 +1206,54 @@ const ResponsiveHeader = ({
                   }}
                 />
               </Box>
+
+              {/* Sort Controls Desktop */}
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Sort By</InputLabel>
+                  <Select
+                    value={sortBy}
+                    label="Sort By"
+                    onChange={(e) => setSortBy(e.target.value)}
+                    sx={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                      color: 'white',
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        border: '1px solid rgba(255, 255, 255, 0.3)',
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        border: '1px solid rgba(255, 255, 255, 0.5)',
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        border: '2px solid #dc267f',
+                      },
+                      '& .MuiSvgIcon-root': {
+                        color: 'white',
+                      },
+                    }}
+                  >
+                    <MenuItem value="updatedAt">Last Updated</MenuItem>
+                    <MenuItem value="createdAt">Created Date</MenuItem>
+                    <MenuItem value="dueDate">Due Date</MenuItem>
+                    <MenuItem value="priority">Priority</MenuItem>
+                    <MenuItem value="status">Status</MenuItem>
+                    <MenuItem value="title">Title</MenuItem>
+                  </Select>
+                </FormControl>
+                
+                <IconButton
+                  onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                  sx={{
+                    color: 'white',
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                    },
+                  }}
+                >
+                  <SortIcon sx={{ transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
+                </IconButton>
+              </Box>
               
               <Button
                 variant="outlined"
@@ -1119,7 +1291,7 @@ const ResponsiveHeader = ({
   );
 };
 
-// Responsive Filters Component
+// Responsive Filters Component with Date Range
 const ResponsiveFilters = ({ 
   showFilters, 
   statusFilter, 
@@ -1129,10 +1301,27 @@ const ResponsiveFilters = ({
   searchQuery,
   setSearchQuery,
   filteredTasksCount,
-  totalTasksCount 
+  totalTasksCount,
+  dateFilter,
+  setDateFilter,
+  dateRangeStart,
+  setDateRangeStart,
+  dateRangeEnd,
+  setDateRangeEnd
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (statusFilter) count++;
+    if (priorityFilter) count++;
+    if (dateFilter && dateFilter !== 'all') count++;
+    if (searchQuery) count++;
+    return count;
+  };
+
+  const activeFiltersCount = getActiveFiltersCount();
 
   return (
     <Collapse in={showFilters}>
@@ -1150,6 +1339,27 @@ const ResponsiveFilters = ({
             border: '1px solid rgba(26, 39, 82, 0.1)'
           }}
         >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <FilterAltIcon sx={{ mr: 1, color: '#1a2752' }} />
+            <Typography variant="h6" sx={{ color: '#1a2752', fontWeight: 600 }}>
+              Filters
+            </Typography>
+            {activeFiltersCount > 0 && (
+              <Badge 
+                badgeContent={activeFiltersCount} 
+                color="primary" 
+                sx={{ 
+                  ml: 1,
+                  '& .MuiBadge-badge': {
+                    backgroundColor: '#dc267f'
+                  }
+                }}
+              >
+                <Box />
+              </Badge>
+            )}
+          </Box>
+
           <Grid container spacing={isMobile ? 2 : 3}>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth>
@@ -1193,26 +1403,94 @@ const ResponsiveFilters = ({
               </FormControl>
             </Grid>
 
-            {/* Search Results Info */}
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Date Filter</InputLabel>
+                <Select
+                  value={dateFilter}
+                  label="Date Filter"
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  sx={{
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#dc267f'
+                    }
+                  }}
+                >
+                  <MenuItem value="all">All Dates</MenuItem>
+                  <MenuItem value="today">Today</MenuItem>
+                  <MenuItem value="yesterday">Yesterday</MenuItem>
+                  <MenuItem value="thisWeek">This Week</MenuItem>
+                  <MenuItem value="lastWeek">Last Week</MenuItem>
+                  <MenuItem value="thisMonth">This Month</MenuItem>
+                  <MenuItem value="lastMonth">Last Month</MenuItem>
+                  <MenuItem value="custom">Custom Range</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Custom Date Range */}
+            {dateFilter === 'custom' && (
+              <>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Start Date"
+                    value={dateRangeStart}
+                    onChange={(e) => setDateRangeStart(e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    sx={{
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#dc267f'
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="End Date"
+                    value={dateRangeEnd}
+                    onChange={(e) => setDateRangeEnd(e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    sx={{
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#dc267f'
+                      }
+                    }}
+                  />
+                </Grid>
+              </>
+            )}
+
+            {/* Search Results Info and Actions */}
+            <Grid item xs={12}>
               <Box sx={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: 2, 
                 flexWrap: 'wrap',
-                justifyContent: isMobile ? 'center' : 'flex-start'
+                justifyContent: 'space-between'
               }}>
                 <Typography variant="body2" color="text.secondary">
-                  {filteredTasksCount} of {totalTasksCount} tasks shown
+                  Showing {filteredTasksCount} of {totalTasksCount} tasks
                 </Typography>
                 
-                {(statusFilter || priorityFilter || searchQuery) && (
+                {activeFiltersCount > 0 && (
                   <Button
                     size="small"
                     onClick={() => {
                       setStatusFilter('');
                       setPriorityFilter('');
                       setSearchQuery('');
+                      setDateFilter('all');
+                      setDateRangeStart('');
+                      setDateRangeEnd('');
                     }}
                     sx={{
                       color: '#dc267f',
@@ -1224,7 +1502,7 @@ const ResponsiveFilters = ({
                       }
                     }}
                   >
-                    Clear All Filters
+                    Clear All Filters ({activeFiltersCount})
                   </Button>
                 )}
               </Box>
@@ -1236,7 +1514,7 @@ const ResponsiveFilters = ({
   );
 };
 
-// Main TaskList Component with Responsive Design
+// Main TaskList Component with Enhanced Sorting and Filtering
 const TaskList = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -1257,6 +1535,13 @@ const TaskList = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [viewMode, setViewMode] = useState(isMobile ? 'card' : 'table');
+  
+  // New sorting and date filtering states
+  const [sortBy, setSortBy] = useState('updatedAt');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateRangeStart, setDateRangeStart] = useState('');
+  const [dateRangeEnd, setDateRangeEnd] = useState('');
 
   // Load tasks function with proper error handling
   const loadTasks = useCallback(async () => {
@@ -1345,32 +1630,120 @@ const TaskList = () => {
     navigate(`/tasks/edit/${taskId}`);
   };
 
-  // Apply filters and search
-  const filteredTasks = tasks.filter(task => {
-    // Status filter
-    if (statusFilter && task.status !== statusFilter) return false;
+  // Date filtering helper function
+  const isWithinDateRange = (taskDate, filterType) => {
+    if (!taskDate) return filterType === 'all';
     
-    // Priority filter
-    if (priorityFilter && task.priority !== priorityFilter) return false;
+    const date = new Date(taskDate);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
     
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesTitle = task.title?.toLowerCase().includes(query);
-      const matchesDescription = task.description?.toLowerCase().includes(query);
-      const matchesAssignees = task.assignees?.some(assignee => 
-        assignee.name?.toLowerCase().includes(query) ||
-        assignee.email?.toLowerCase().includes(query)
-      );
-      const matchesDepartment = task.department?.name?.toLowerCase().includes(query);
-      
-      if (!matchesTitle && !matchesDescription && !matchesAssignees && !matchesDepartment) {
-        return false;
-      }
+    switch (filterType) {
+      case 'all':
+        return true;
+      case 'today':
+        return date >= today;
+      case 'yesterday':
+        return date >= yesterday && date < today;
+      case 'thisWeek':
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
+        return date >= weekStart;
+      case 'lastWeek':
+        const lastWeekStart = new Date(today);
+        lastWeekStart.setDate(today.getDate() - today.getDay() - 7);
+        const lastWeekEnd = new Date(today);
+        lastWeekEnd.setDate(today.getDate() - today.getDay() - 1);
+        return date >= lastWeekStart && date <= lastWeekEnd;
+      case 'thisMonth':
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        return date >= monthStart;
+      case 'lastMonth':
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        return date >= lastMonthStart && date <= lastMonthEnd;
+      case 'custom':
+        if (!dateRangeStart && !dateRangeEnd) return true;
+        const startDate = dateRangeStart ? new Date(dateRangeStart) : new Date(0);
+        const endDate = dateRangeEnd ? new Date(dateRangeEnd) : new Date();
+        return date >= startDate && date <= endDate;
+      default:
+        return true;
     }
-    
-    return true;
-  });
+  };
+
+  // Sorting helper function
+  const sortTasks = (tasksToSort) => {
+    return [...tasksToSort].sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'updatedAt':
+        case 'createdAt':
+        case 'dueDate':
+          aValue = a[sortBy] ? new Date(a[sortBy]) : new Date(0);
+          bValue = b[sortBy] ? new Date(b[sortBy]) : new Date(0);
+          break;
+        case 'title':
+          aValue = (a.title || '').toLowerCase();
+          bValue = (b.title || '').toLowerCase();
+          break;
+        case 'priority':
+          const priorityOrder = { high: 3, medium: 2, low: 1 };
+          aValue = priorityOrder[a.priority] || 0;
+          bValue = priorityOrder[b.priority] || 0;
+          break;
+        case 'status':
+          const statusOrder = { pending: 1, ongoing: 2, completed: 3 };
+          aValue = statusOrder[a.status] || 0;
+          bValue = statusOrder[b.status] || 0;
+          break;
+        default:
+          aValue = a[sortBy] || '';
+          bValue = b[sortBy] || '';
+      }
+
+      if (sortOrder === 'desc') {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      } else {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      }
+    });
+  };
+
+  // Apply filters, date filtering, and search
+  const filteredTasks = sortTasks(
+    tasks.filter(task => {
+      // Status filter
+      if (statusFilter && task.status !== statusFilter) return false;
+      
+      // Priority filter
+      if (priorityFilter && task.priority !== priorityFilter) return false;
+      
+      // Date filter (based on updatedAt)
+      if (!isWithinDateRange(task.updatedAt, dateFilter)) return false;
+      
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesTitle = task.title?.toLowerCase().includes(query);
+        const matchesDescription = task.description?.toLowerCase().includes(query);
+        const matchesAssignees = task.assignees?.some(assignee => 
+          assignee.name?.toLowerCase().includes(query) ||
+          assignee.email?.toLowerCase().includes(query)
+        );
+        const matchesDepartment = task.department?.name?.toLowerCase().includes(query);
+        
+        if (!matchesTitle && !matchesDescription && !matchesAssignees && !matchesDepartment) {
+          return false;
+        }
+      }
+      
+      return true;
+    })
+  );
 
   // Animation variants
   const containerVariants = {
@@ -1441,6 +1814,10 @@ const TaskList = () => {
         navigate={navigate}
         filteredTasksCount={filteredTasks.length}
         totalTasksCount={tasks.length}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        sortOrder={sortOrder}
+        setSortOrder={setSortOrder}
       />
 
       {/* Responsive Filters */}
@@ -1454,6 +1831,12 @@ const TaskList = () => {
         setSearchQuery={setSearchQuery}
         filteredTasksCount={filteredTasks.length}
         totalTasksCount={tasks.length}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        dateRangeStart={dateRangeStart}
+        setDateRangeStart={setDateRangeStart}
+        dateRangeEnd={dateRangeEnd}
+        setDateRangeEnd={setDateRangeEnd}
       />
 
       {/* View Mode Toggle for Desktop/Tablet */}
@@ -1464,7 +1847,15 @@ const TaskList = () => {
             startIcon={<ViewModuleIcon />}
             onClick={() => setViewMode('card')}
             size="small"
-            sx={{ mr: 1 }}
+            sx={{ 
+              mr: 1,
+              backgroundColor: viewMode === 'card' ? '#1a2752' : 'transparent',
+              borderColor: '#1a2752',
+              color: viewMode === 'card' ? 'white' : '#1a2752',
+              '&:hover': {
+                backgroundColor: viewMode === 'card' ? '#0f1a3a' : 'rgba(26, 39, 82, 0.04)'
+              }
+            }}
           >
             Card
           </Button>
@@ -1473,6 +1864,14 @@ const TaskList = () => {
             startIcon={<ViewListIcon />}
             onClick={() => setViewMode('table')}
             size="small"
+            sx={{
+              backgroundColor: viewMode === 'table' ? '#1a2752' : 'transparent',
+              borderColor: '#1a2752',
+              color: viewMode === 'table' ? 'white' : '#1a2752',
+              '&:hover': {
+                backgroundColor: viewMode === 'table' ? '#0f1a3a' : 'rgba(26, 39, 82, 0.04)'
+              }
+            }}
           >
             Table
           </Button>
@@ -1500,7 +1899,7 @@ const TaskList = () => {
               No tasks found
             </Typography>
             <Typography color="text.secondary" sx={{ mb: 3, px: isMobile ? 2 : 0 }}>
-              {statusFilter || priorityFilter || searchQuery
+              {statusFilter || priorityFilter || searchQuery || dateFilter !== 'all'
                 ? 'No tasks match your current filters or search criteria.' 
                 : 'You don\'t have any tasks assigned yet.'}
             </Typography>
@@ -1562,7 +1961,8 @@ const TaskList = () => {
                     <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 150 }}>Progress</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 180 }}>Assignees</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 120 }}>Due Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 200 }}>Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 140 }}>Last Updated</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1a2752', minWidth: 220 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1644,6 +2044,14 @@ const TaskList = () => {
                                   {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'}
                                 </Typography>
                                 <DueDateWarning dueDate={task.dueDate} />
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                                <Typography variant="body2">
+                                  {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : 'N/A'}
+                                </Typography>
+                                <LastUpdatedBadge updatedAt={task.updatedAt} size="small" />
                               </Box>
                             </TableCell>
                             <TableCell>
@@ -1738,7 +2146,7 @@ const TaskList = () => {
                           {/* Comments Row */}
                           {visibleCommentsTaskId === task._id && (
                             <TableRow>
-                              <TableCell colSpan={7} sx={{ backgroundColor: 'rgba(26, 39, 82, 0.02)' }}>
+                              <TableCell colSpan={8} sx={{ backgroundColor: 'rgba(26, 39, 82, 0.02)' }}>
                                 <Collapse in={visibleCommentsTaskId === task._id} timeout="auto">
                                   <Box sx={{ py: 2 }}>
                                     <Typography variant="h6" sx={{ mb: 2, color: '#1a2752' }}>

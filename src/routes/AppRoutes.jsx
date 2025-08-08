@@ -23,6 +23,7 @@ import UserProfile from '../pages/settings/UserProfile';
 import UserList from '../pages/users/UserList';
 import UserForm from '../pages/users/UserForm';
 import UserEdit from '../pages/users/UserEdit';
+import Profile from '../pages/users/Profile';
 import RoleAssignment from '../pages/users/RoleAssignment';
 
 import DepartmentList from '../pages/departments/DepartmentList';
@@ -78,6 +79,8 @@ const AppRoutes = () => (
         <Route path="/settings" element={<UserProfile />} />
         <Route path="/chat/public" element={<PublicChat />} />
         <Route path="/chat/department" element={<DepartmentChat />} />
+        <Route path="/profile" element={<Profile />} />
+        
       </Route>
     </Route>
 
@@ -91,6 +94,7 @@ const AppRoutes = () => (
         <Route path="/users/create" element={<UserForm />} />
         <Route path="/users/:userId" element={<UserForm />} />
         <Route path="/users/edit/:userId" element={<UserEdit />} />
+        
         <Route path="/roles" element={<RoleAssignment />} />
         
 

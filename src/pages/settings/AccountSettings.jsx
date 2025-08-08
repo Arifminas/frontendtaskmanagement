@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../../components/common/Layout';
 import { Form, Button, Container, Alert } from 'react-bootstrap';
-import { getUserProfile, updateUserProfile, changePassword } from '../../Api/users';
+import { getCurrentUser, updateCurrentUser, changePassword } from '../../Api/users';
 import { notifySuccess, notifyError } from '../../utils/notifications';
 
 const AccountSettings = () => {
@@ -17,7 +17,7 @@ const AccountSettings = () => {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const res = await getUserProfile();
+        const res = await getCurrentUser();
         setProfile({ name: res.data.data.name, email: res.data.data.email });
       } catch (err) {
         notifyError('Failed to load profile');
@@ -47,7 +47,7 @@ const AccountSettings = () => {
     setError('');
     setSuccessMsg('');
     try {
-      await updateUserProfile(profile);
+      await updateCurrentUser(profile);
       notifySuccess('Profile updated successfully');
       setSuccessMsg('Profile updated');
     } catch (err) {

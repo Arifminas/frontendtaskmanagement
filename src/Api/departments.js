@@ -40,3 +40,10 @@ export const fetchDepartmentsWithLocation = async () => {
   return res.data.data;
 };
 
+import axiosPublic from '../Api/axiosPublic'; // note the capital A like your other imports
+
+export const fetchDepartmentsPublic = async () => {
+  const res = await axiosPublic.get('/departments/public');
+  return res.data.data; // [{ _id, name, ...}]
+};
+

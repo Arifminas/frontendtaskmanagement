@@ -51,6 +51,10 @@ const validateToken = (token) => {
   const clearAuthData = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    try { 
+     const { default: axiosInstance } = require('../Api/axiosInstance');
+   delete axiosInstance.defaults.headers.common.Authorization;
+ } catch {}
     setToken(null);
     setUser(null);
   }, []);
@@ -149,4 +153,4 @@ const validateToken = (token) => {
   );
 };
 
- export default AuthProvider;;
+ export default AuthProvider;

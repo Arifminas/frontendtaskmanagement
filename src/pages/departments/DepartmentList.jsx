@@ -7,9 +7,7 @@ import {
   Row, 
   Col, 
   Card,
-  Badge,
   Alert,
-  ButtonGroup,
   Dropdown
 } from 'react-bootstrap';
 import {
@@ -32,7 +30,8 @@ import {
   Visibility as ViewIcon,
   MoreVert as MoreVertIcon,
   Business as BusinessIcon,
-  Category as CategoryIcon
+  Category as CategoryIcon,
+  Map as MapIcon, // ⬅️ added
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchDepartments, deleteDepartment } from '../../Api/departments';
@@ -41,11 +40,11 @@ import { useNavigate } from 'react-router-dom';
 
 // Color palette matching your sidebar design
 const colorPalette = {
-  primary: '#dc267f', // Pink primary from sidebar
-  secondary: '#b91c5c', // Darker pink
-  accent: '#2a3f6f', // Blue accent from sidebar
-  dark: '#1a2752', // Dark blue from sidebar
-  light: '#f8fafc', // Light background
+  primary: '#dc267f',
+  secondary: '#b91c5c',
+  accent: '#2a3f6f',
+  dark: '#1a2752',
+  light: '#f8fafc',
   surface: '#ffffff',
   success: '#10b981',
   warning: '#f59e0b',
@@ -173,8 +172,6 @@ const DepartmentList = ({ darkMode = false }) => {
             transition={{ delay: index * 0.1, duration: 0.3 }}
             whileHover={{ y: -4 }}
           >
-            
-
             <Card 
               style={{ 
                 borderRadius: '16px',
@@ -427,27 +424,35 @@ const DepartmentList = ({ darkMode = false }) => {
               >
                 <MoreVertIcon />
               </Dropdown.Toggle>
+
               <Dropdown.Menu>
                 <Dropdown.Item onClick={() => handleView(dept._id)}>
-                  <ViewIcon style={{ marginRight: '8px', fontSize: '16px' }} />
+                  <ViewIcon style={{ marginRight: 8, fontSize: 16 }} />
                   View
                 </Dropdown.Item>
+
                 <Dropdown.Item onClick={() => handleEdit(dept._id)}>
-                  <EditIcon style={{ marginRight: '8px', fontSize: '16px' }} />
+                  <EditIcon style={{ marginRight: 8, fontSize: 16 }} />
                   Edit
                 </Dropdown.Item>
+
                 <Dropdown.Divider />
+
+                <Dropdown.Item onClick={() => navigate('/departments/map')}>
+                  <MapIcon style={{ marginRight: 8, fontSize: 16 }} />
+                  Department Map
+                </Dropdown.Item>
+
+                <Dropdown.Divider />
+
                 <Dropdown.Item 
                   onClick={() => handleDelete(dept._id, dept.name)}
                   style={{ color: colorPalette.danger }}
                 >
-                  <DeleteIcon style={{ marginRight: '8px', fontSize: '16px' }} />
+                  <DeleteIcon style={{ marginRight: 8, fontSize: 16 }} />
                   Delete
                 </Dropdown.Item>
               </Dropdown.Menu>
-              <MenuItem onClick={() => navigate('/departments/map')}>
-  <MapIcon fontSize="small" /> Department Map
-</MenuItem>
             </Dropdown>
           ) : (
             <Box className="d-flex justify-content-center">

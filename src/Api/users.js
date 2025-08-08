@@ -45,14 +45,25 @@ export const deleteUser = async (userId) => {
 };
 
 // Get current logged-in user's profile
-export const getUserProfile = async () => {
-  const response = await axiosInstance.get('/users/me');
-  return response.data.data;
+// GET /users/me
+export const getCurrentUser = async () => {
+  const res = await axiosInstance.get('/users/me');
+  return res.data.data;
 };
+
+// PUT /users/me
+export const updateCurrentUser = async (updates) => {
+  const res = await axiosInstance.put('/users/me', updates);
+  return res.data.data;
+};
+
 
 export const updateUserProfile = async (userData) => {
   const response = await axiosInstance.put('/users/me', userData);
   return response.data.data;
 };
+
+
+
 
 
