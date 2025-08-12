@@ -1,25 +1,26 @@
+// src/Api/chat.js
 import axiosInstance from './axiosInstance';
 
-// Fetch all public chat messages
-export const fetchPublicMessages = async () => {
-  const response = await axiosInstance.get('/chat/public');
-  return response.data.messages;  // Adjust if your backend returns differently
+// Public history
+export const fetchPublicMessages = async (params = {}) => {
+  const res = await axiosInstance.get('/chat/public', { params });
+  return res.data?.data || [];
 };
 
-// Fetch department-specific chat messages
-export const fetchDepartmentMessages = async (departmentId) => {
-  const response = await axiosInstance.get(`/chat/department/${departmentId}`);
-  return response.data.messages;
+// Department history
+export const fetchDepartmentMessages = async (departmentId, params = {}) => {
+  const res = await axiosInstance.get(`/chat/department/${departmentId}`, { params });
+  return res.data?.data || [];
 };
 
-// Send a message to public chat
+// POST public message (REST fallback / optional)
 export const sendPublicMessage = async (message) => {
-  const response = await axiosInstance.post('/chat/public', { message });
-  return response.data;
+  const res = await axiosInstance.post('/chat/public', { message });
+  return res.data?.data;
 };
 
-// Send a message to department chat
+// POST department message (REST fallback / optional)
 export const sendDepartmentMessage = async (departmentId, message) => {
-  const response = await axiosInstance.post(`/chat/department/${departmentId}`, { message });
-  return response.data;
+  const res = await axiosInstance.post('/chat/department', { departmentId, message });
+  return res.data?.data;
 };

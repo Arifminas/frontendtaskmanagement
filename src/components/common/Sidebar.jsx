@@ -1,3 +1,4 @@
+// src/components/common/Sidebar.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Drawer,
@@ -27,24 +28,23 @@ import {
   Settings,
   Support,
   Business,
-  LocalShipping,
   Person,
-  Apartment,
   Task,
   AdminPanelSettings,
-  Group,
-  Description,
-  AccountTree,
   AssignmentInd,
   Add,
   ViewList,
   PriorityHigh,
   Close,
   ChevronLeft,
-  Menu
+  Menu as MenuIcon,
+  AccountTree,
+  Description,
+  Apartment,
+  ChatBubbleOutline as ChatIcon, // <-- added
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 // Custom hooks for better organization
 const useResponsive = () => {
@@ -87,6 +87,18 @@ const MENU_CONFIG = {
       icon: <Dashboard />,
       path: '/dashboard',
       roles: ['admin', 'coordinator', 'user']
+    },
+    // --- Chat Section (new) ---
+    {
+      id: 'chat',
+      title: 'Chat',
+      icon: <ChatIcon />,
+      roles: ['admin', 'coordinator', 'user'],
+      hasSubmenu: true,
+      children: [
+        { title: 'Public Chat', path: '/chat/public', icon: <ChatIcon /> },
+        { title: 'Department Chat', path: '/chat/department', icon: <Apartment /> },
+      ]
     },
     {
       id: 'userManagement',
@@ -204,7 +216,7 @@ const getDrawerStyles = (isExpanded, breakpoint, darkMode, isMobile) => ({
   }
 });
 
-const getListItemStyles = (isActive, isChild, showText, theme) => ({
+const getListItemStyles = (isActive, isChild, showText) => ({
   pl: isChild ? (showText ? 4 : 3) : (showText ? 2 : 1.5),
   pr: showText ? 2 : 1.5,
   py: 1.5,
@@ -218,6 +230,7 @@ const getListItemStyles = (isActive, isChild, showText, theme) => ({
     : 'transparent',
   cursor: 'pointer',
   transition: 'all 0.2s ease-in-out',
+  position: 'relative',
   '&:hover': {
     background: isActive 
       ? 'linear-gradient(135deg, #e91e63 0%, #c2185b 100%)'
@@ -468,12 +481,14 @@ const NavigationContent = React.memo(({
   onToggleSection,
   isActive,
   isExactActive,
-  onNavigate
+  onNavigate,
+  onToggleChat,          // <-- new
+  chatUnread = 0         // <-- new
 }) => (
   <>
     <Box sx={{ flexGrow: 1, overflow: 'auto', py: 1 }}>
       <List component="nav">
-        {menuItems.map((item, index) => (
+        {menuItems.map((item) => (
           <React.Fragment key={item.id}>
             <MenuItem
               item={item}
@@ -531,9 +546,39 @@ const NavigationContent = React.memo(({
           />
         ))}
       </List>
-      
+
+      {/* Chat toggle button (bottom area) */}
+      <Box sx={{ p: 2, display: 'flex', justifyContent: showText ? 'space-between' : 'center', alignItems: 'center' }}>
+        {showText && (
+          <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+            Quick actions
+          </Typography>
+        )}
+        <Tooltip title="Toggle Chat" arrow>
+          <span>
+            <IconButton
+              onClick={onToggleChat}
+              sx={{
+                bgcolor: 'rgba(255,255,255,0.12)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
+              }}
+            >
+              <Badge
+                color="error"
+                badgeContent={chatUnread > 99 ? '99+' : chatUnread}
+                invisible={!chatUnread}
+              >
+                <ChatIcon />
+              </Badge>
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Box>
+
       {showText && (
-        <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Box sx={{ p: 2, textAlign: 'center', pt: 0 }}>
           <Typography variant="caption" sx={{ 
             color: 'rgba(255, 255, 255, 0.6)',
             fontSize: '0.7rem' 
@@ -598,7 +643,7 @@ const MobileFAB = React.memo(({ onClick, darkMode }) => (
         }
       }}
     >
-      <Menu sx={{ fontSize: 28 }} />
+      <MenuIcon sx={{ fontSize: 28 }} />
     </Fab>
   </Box>
 ));
@@ -611,10 +656,13 @@ const Sidebar = ({
   collapsed = false, 
   onToggleCollapse, 
   darkMode = false,
-  onOpen 
+  onOpen,
+  onToggleChat,          // <-- NEW prop (optional): open/close chat drawer/panel
+  chatUnread = 0         // <-- NEW prop (optional): badge count on chat toggle
 }) => {
   const location = useLocation();
-  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const navigate = useNavigate();
+  const { isMobile, isTablet } = useResponsive();
   const { 
     isHovered, 
     setIsHovered, 
@@ -624,6 +672,15 @@ const Sidebar = ({
     mobileOpen,
     setMobileOpen
   } = useSidebarState(collapsed, isMobile);
+
+  // Fallback for chat toggle: if no handler provided, navigate to public chat
+  const handleToggleChat = useCallback(() => {
+    if (typeof onToggleChat === 'function') {
+      onToggleChat();
+    } else {
+      navigate('/chat/public');
+    }
+  }, [onToggleChat, navigate]);
 
   // Event handlers
   const handleMouseEnter = useCallback(() => {
@@ -642,12 +699,12 @@ const Sidebar = ({
 
   const handleMobileOpen = useCallback(() => {
     setMobileOpen(true);
-  }, []);
+  }, [setMobileOpen]);
 
   const handleMobileClose = useCallback(() => {
     setMobileOpen(false);
     if (onClose) onClose();
-  }, [onClose]);
+  }, [onClose, setMobileOpen]);
 
   const handleNavigate = useCallback(() => {
     if (isMobile) {
@@ -680,14 +737,14 @@ const Sidebar = ({
       }
     });
     setOpenSections(newOpenSections);
-  }, [location, filteredMenuItems]);
+  }, [location, filteredMenuItems, setOpenSections]);
 
   // Sync mobile open state with parent prop
   useEffect(() => {
     if (isMobile && open !== undefined) {
       setMobileOpen(open);
     }
-  }, [isMobile, open]);
+  }, [isMobile, open, setMobileOpen]);
 
   const breakpoint = isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop';
   const drawerStyles = getDrawerStyles(isExpanded, breakpoint, darkMode, isMobile);
@@ -751,6 +808,8 @@ const Sidebar = ({
               isActive={isActive}
               isExactActive={isExactActive}
               onNavigate={handleNavigate}
+              onToggleChat={handleToggleChat}   // pass toggle
+              chatUnread={chatUnread}           // pass unread
             />
           </Box>
         </Drawer>
@@ -788,6 +847,8 @@ const Sidebar = ({
           isActive={isActive}
           isExactActive={isExactActive}
           onNavigate={handleNavigate}
+          onToggleChat={handleToggleChat}   // pass toggle
+          chatUnread={chatUnread}           // pass unread
         />
       </Drawer>
     </motion.div>

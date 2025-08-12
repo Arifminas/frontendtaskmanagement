@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
-import { useNotification } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const NotificationListener = () => {
-  const socket = useSocket();
-  const { showToast, showPushNotification } = useNotification();
+  const { socket } = useSocket() || {};
+  const { showToast, showPushNotification } = useNotifications();
 
  useEffect(() => {
-  if (!socket) return;
+  if (!socket || typeof socket.on !== 'function') return;
 
   // Listen for real-time notifications from backend
   socket.on('newNotification', (data) => {

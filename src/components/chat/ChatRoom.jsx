@@ -1,80 +1,128 @@
-import React, { useEffect, useState, useRef } from 'react';
+// src/components/chat/ChatRoom.jsx
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ListGroup, Form, Button, Spinner, Badge } from 'react-bootstrap';
 import { useSocket } from '../../contexts/SocketContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { ListGroup, Form, Button } from 'react-bootstrap';
+import {
+  fetchPublicMessages,
+  fetchDepartmentMessages,
+} from '../../Api/chat';
 
-const ChatRoom = ({ departmentId, isPublic }) => {
-  const socket = useSocket();
+const ChatRoom = ({ isPublic = true, departmentId = null }) => {
+  const { socket } = useSocket() || {};
   const { user } = useAuth();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const messagesEndRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [msgs, setMsgs] = useState([]);
+  const [text, setText] = useState('');
+  const endRef = useRef(null);
 
+  const roomKey = useMemo(
+    () => (isPublic ? 'public' : `department_${departmentId}`),
+    [isPublic, departmentId]
+  );
+
+  // initial history
   useEffect(() => {
-    if (!socket) return;
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = isPublic
+          ? await fetchPublicMessages()
+          : await fetchDepartmentMessages(departmentId);
+        if (mounted) setMsgs(data);
+      } catch (e) {
+        console.error('Chat history load failed', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [isPublic, departmentId]);
 
-    // Join room
+  // join room + live events
+  useEffect(() => {
+    if (!socket || typeof socket.emit !== 'function' || typeof socket.on !== 'function') return;
+
     if (isPublic) socket.emit('joinPublic');
     else socket.emit('joinDepartment', departmentId);
 
-    // Listen for new messages
-    const eventName = isPublic ? 'newPublicMessage' : 'newDepartmentMessage';
-    socket.on(eventName, (msg) => {
-      setMessages((prev) => [...prev, msg]);
-    });
+    const evt = isPublic ? 'chat:public:new' : 'chat:dept:new';
+    const handler = (msg) => setMsgs((prev) => [...prev, msg]);
 
-    return () => {
-      socket.off(eventName);
-    };
-  }, [socket, departmentId, isPublic]);
+    socket.on(evt, handler);
+    return () => socket.off(evt, handler);
+  }, [socket, isPublic, departmentId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  const send = () => {
+    const message = text.trim();
+    if (!socket || !message) return;
 
-    const msg = {
-      user: user.name,
-      text: input,
-      createdAt: new Date().toISOString(),
-    };
-
-    if (isPublic) socket.emit('publicMessage', msg);
-    else socket.emit('departmentMessage', { departmentId, msg });
-
-    setMessages((prev) => [...prev, msg]);
-    setInput('');
+    if (isPublic) {
+      socket.emit('chat:public:send', { message }, (ack) => {
+        if (!ack?.ok) console.warn('Public send failed', ack?.error);
+      });
+    } else {
+      socket.emit('chat:dept:send', { departmentId, message }, (ack) => {
+        if (!ack?.ok) console.warn('Dept send failed', ack?.error);
+      });
+    }
+    setText('');
   };
 
+  if (loading) {
+    return <div className="p-3"><Spinner animation="border" /></div>;
+  }
+
   return (
-    <div style={{ height: 400, border: '1px solid #ccc', padding: 10, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: 420, border: '1px solid #e5e5e5', padding: 10, display: 'flex', flexDirection: 'column', borderRadius: 8 }}>
+      <div className="d-flex align-items-center justify-content-between mb-2">
+        <strong className="text-muted">
+          {isPublic ? 'Public Chat' : `Department Room`}
+        </strong>
+        <Badge bg="secondary">{roomKey}</Badge>
+      </div>
+
       <ListGroup style={{ flexGrow: 1, overflowY: 'auto' }}>
-        {messages.map((m, idx) => (
-          <ListGroup.Item key={idx}>
-            <strong>{m.user}: </strong> {m.text} <br />
-            <small>{new Date(m.createdAt).toLocaleTimeString()}</small>
+        {msgs.map((m) => (
+          <ListGroup.Item key={m._id || m.createdAt + (m.sender?._id || '')}>
+            <div className="d-flex justify-content-between">
+              <div>
+                <strong>{m.sender?.name || 'User'}:</strong> {m.message}
+              </div>
+              <small className="text-muted">
+                {new Date(m.createdAt).toLocaleTimeString()}
+              </small>
+            </div>
           </ListGroup.Item>
         ))}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </ListGroup>
+
       <Form
+        className="mt-2 d-flex"
         onSubmit={(e) => {
           e.preventDefault();
-          sendMessage();
+          send();
         }}
-        className="mt-2 d-flex"
       >
         <Form.Control
           type="text"
-          placeholder="Type a message..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
         />
-        <Button type="submit" variant="primary" className="ms-2">
-          Send
-        </Button>
+        <Button className="ms-2" onClick={send}>Send</Button>
       </Form>
     </div>
   );

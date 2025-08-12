@@ -82,7 +82,7 @@ export const getTaskHistory = async (taskId) => {
   }
 };
 
-export const fetchRecommendedTasks = async () => {
-  const response = await axiosInstance.get('/tasks/recommendations');
-  return response.data.data;
-};
+export async function fetchRecommendedTasks() {
+  const res = await axiosInstance.get('/tasks/recommendations');
+  return res.data?.data ?? [];
+}

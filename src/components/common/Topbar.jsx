@@ -70,7 +70,8 @@ const Topbar = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
-  const socket = useSocket();
+  const { socket, connected } = useSocket() || {};
+
   
   // State management
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
@@ -118,7 +119,7 @@ const Topbar = ({
 
   // Socket listener for real-time notifications
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || typeof socket.on !== 'function') return;
     
     const handleNewNotification = (data) => {
       setNotifications(prev => [data, ...prev]);

@@ -38,11 +38,25 @@ import {
   Speed as SpeedIcon,
   Star as StarIcon
 } from '@mui/icons-material';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
+
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend
+} from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchDashboardData } from '../../Api/dashboardApi';
 import axiosInstance from '../../Api/axiosInstance';
 import { notifyError, notifySuccess } from '../../utils/notifications';
+import { useNavigate } from 'react-router-dom';
 
 // Custom hook for debouncing
 const useDebounce = (callback, delay) => {
@@ -249,18 +263,27 @@ const UserItem = React.memo(({ user, index, formatLastLogin }) => (
 
 const Dashboard = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isCacheValid, updateCache, getCachedData } = useCache();
 
   // State management
   const [dashboardData, setDashboardData] = useState(null);
   const [activeUsers, setActiveUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+ const [loading, setLoading] = useState(true);
   const [activeUsersLoading, setActiveUsersLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeUsersError, setActiveUsersError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Quick Actions config (navigation)
+  const quickActions = useMemo(() => ([
+    { icon: TaskIcon,      label: 'Create Task',       color: '#1a2752', path: '/tasks/create' },
+    { icon: PeopleIcon,    label: 'Manage Users',      color: '#4caf50', path: '/users' },
+    { icon: AnalyticsIcon, label: 'View Reports',      color: '#ff9800', path: '/reports' },
+    { icon: ScheduleIcon,  label: 'Schedule Meeting',  color: '#dc267f', path: '/meetings' },
+  ]), []);
 
   // Refs
   const intervalRef = useRef(null);
@@ -314,10 +337,10 @@ const Dashboard = () => {
       if (showRefreshing) notifySuccess('Dashboard data refreshed');
     } catch (err) {
       if (
-     err?.name === 'AbortError' ||
-     err?.code === 'ERR_CANCELED' ||
-     err?.message === 'canceled'
-    ) return;
+        err?.name === 'AbortError' ||
+        err?.code === 'ERR_CANCELED' ||
+        err?.message === 'canceled'
+      ) return;
 
       if (err.response?.status === 429) {
         setError('Too many requests. Please wait before refreshing again.');
@@ -347,15 +370,15 @@ const Dashboard = () => {
 
     try {
       if (controllersRef.current.activeUsers) {
-     controllersRef.current.activeUsers.abort();
-   }
-   controllersRef.current.activeUsers = new AbortController();
+        controllersRef.current.activeUsers.abort();
+      }
+      controllersRef.current.activeUsers = new AbortController();
 
       lastRequestTime.current.activeUsers = Date.now();
 
       const res = await axiosInstance.get('/dashboard/active-users', {
         signal: controllersRef.current.activeUsers.signal,
-        timeout: 0, // no timeout (or bump this to 30000)
+        timeout: 0,
       });
 
       const users = res.data?.data ?? res.data ?? [];
@@ -368,10 +391,10 @@ const Dashboard = () => {
       setActiveUsersError('');
     } catch (err) {
       if (
-     err?.name === 'AbortError' ||
-     err?.code === 'ERR_CANCELED' ||
-     err?.message === 'canceled'
-   ) return;
+        err?.name === 'AbortError' ||
+        err?.code === 'ERR_CANCELED' ||
+        err?.message === 'canceled'
+      ) return;
 
       console.error('Active users load failed:', err);
       if (err.response?.status === 429) {
@@ -447,18 +470,15 @@ const Dashboard = () => {
 
   const totalTasks = useMemo(() =>
     Object.values(tasksByStatus).reduce((a, b) => a + b, 0),
-    [tasksByStatus]
-  );
+  [tasksByStatus]);
 
   const completionRate = useMemo(() =>
     totalTasks > 0 ? ((tasksByStatus.completed || 0) / totalTasks * 100).toFixed(1) : 0,
-    [totalTasks, tasksByStatus.completed]
-  );
+  [totalTasks, tasksByStatus.completed]);
 
   const overdueRate = useMemo(() =>
     totalTasks > 0 ? (overdueCount / totalTasks * 100).toFixed(1) : 0,
-    [totalTasks, overdueCount]
-  );
+  [totalTasks, overdueCount]);
 
   const chartData = useMemo(() => ({
     pieData: [
@@ -625,25 +645,27 @@ const Dashboard = () => {
               </Box>
             )}
 
-            <Tooltip title="Refresh Dashboard">
-              <IconButton
-                onClick={debouncedRefresh}
-                disabled={refreshing}
-                sx={{
-                  backgroundColor: 'primary.main',
-                  color: 'white',
-                  '&:hover': { backgroundColor: 'primary.dark', transform: 'scale(1.05)' },
-                  '&:disabled': { backgroundColor: 'action.disabled' },
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                <motion.div
-                  animate={{ rotate: refreshing ? 360 : 0 }}
-                  transition={{ duration: 1, repeat: refreshing ? Infinity : 0, ease: "linear" }}
+            <Tooltip title={refreshing ? "Refreshing…" : "Refresh Dashboard"}>
+              <span style={{ display: 'inline-block' }}>
+                <IconButton
+                  onClick={debouncedRefresh}
+                  disabled={refreshing}
+                  sx={{
+                    backgroundColor: 'primary.main',
+                    color: 'white',
+                    '&:hover': { backgroundColor: 'primary.dark', transform: 'scale(1.05)' },
+                    '&:disabled': { backgroundColor: 'action.disabled' },
+                    transition: 'all 0.3s ease'
+                  }}
                 >
-                  <RefreshIcon />
-                </motion.div>
-              </IconButton>
+                  <motion.div
+                    animate={{ rotate: refreshing ? 360 : 0 }}
+                    transition={{ duration: 1, repeat: refreshing ? Infinity : 0, ease: "linear" }}
+                  >
+                    <RefreshIcon />
+                  </motion.div>
+                </IconButton>
+              </span>
             </Tooltip>
           </Stack>
         </Stack>
@@ -1128,7 +1150,7 @@ const Dashboard = () => {
           )}
         </AnimatePresence>
 
-        {/* Quick Actions Footer */}
+        {/* Quick Actions Footer (with navigation) */}
         <Paper
           elevation={0}
           sx={{
@@ -1142,45 +1164,52 @@ const Dashboard = () => {
         >
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Quick Actions</Typography>
           <Grid container spacing={2}>
-            {[
-              { icon: <TaskIcon />, label: 'Create Task', color: '#1a2752' },
-              { icon: <PeopleIcon />, label: 'Manage Users', color: '#4caf50' },
-              { icon: <AnalyticsIcon />, label: 'View Reports', color: '#ff9800' },
-              { icon: <ScheduleIcon />, label: 'Schedule Meeting', color: '#dc267f' }
-            ].map((action) => (
-              <Grid item xs={6} sm={3} key={action.label}>
-                <Card
-                  sx={{
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    height: { xs: 80, sm: 100 },
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: '0 8px 25px rgba(26, 39, 82, 0.15)',
-                    }
-                  }}
-                >
-                  <CardContent
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Grid item xs={6} sm={3} key={action.label}>
+                  <Card
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(action.path)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(action.path);
+                      }
+                    }}
                     sx={{
-                      textAlign: 'center',
-                      py: 3,
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                      alignItems: 'center'
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      height: { xs: 80, sm: 100 },
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 8px 25px rgba(26, 39, 82, 0.15)',
+                      }
                     }}
                   >
-                    <Avatar sx={{ backgroundColor: action.color, mb: 2, width: 40, height: 40 }}>
-                      {React.cloneElement(action.icon, { sx: { fontSize: 20 } })}
-                    </Avatar>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, textAlign: 'center', lineHeight: 1.2 }}>
-                      {action.label}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+                    <CardContent
+                      sx={{
+                        textAlign: 'center',
+                        py: 3,
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Avatar sx={{ backgroundColor: action.color, mb: 2, width: 40, height: 40 }}>
+                        <Icon sx={{ fontSize: 20 }} />
+                      </Avatar>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, textAlign: 'center', lineHeight: 1.2 }}>
+                        {action.label}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
         </Paper>
       </motion.div>

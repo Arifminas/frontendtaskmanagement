@@ -7,7 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
 import NotificationListener from './components/notifications/NotificationListener';
 import AppRoutes from './routes/AppRoutes';
-import { NotificationProvider } from './contexts/NotificationContext';
+import  NotificationProvider from './contexts/NotificationContext.jsx';
 // import Topbar from './components/common/Topbar';
 
 const App = () => {

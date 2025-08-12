@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 
 import 'react-toastify/dist/ReactToastify.css';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { registerServiceWorker, subscribePush, saveSubscription } from '../utils/pushClient';
 
 const AuthContext = createContext();
 
@@ -106,6 +107,18 @@ const validateToken = (token) => {
       setUser(res.user);
 
       toast.success('Login successful!');
+
+      async function setupPush() {
+  try {
+    await registerServiceWorker();
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const sub = await subscribePush();
+    await saveSubscription(sub?.toJSON?.() || sub);
+  } catch (e) {
+    console.warn('Push setup skipped', e.message);
+  }
+}
       navigate('/dashboard', { replace: true });
       return res;
     } catch (error) {
